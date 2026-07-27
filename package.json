@@ -12,7 +12,7 @@
     "seed": "node server/src/seed.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "node --test server/src/repo.test.ts"
+    "test": "node --test server/src/*.test.ts"
   },
   "engines": {
     "node": ">=22.18"

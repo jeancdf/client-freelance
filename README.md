@@ -18,12 +18,24 @@ npm run build    # typecheck + bundle dans dist/
 
 ## Les écrans
 
-Le sélecteur « Parcours », en bas à droite, donne accès à tous les états, y
-compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre.
+Quatre adresses, et rien d'autre :
+
+| Adresse | Qui l'ouvre |
+| --- | --- |
+| `/` | Un visiteur venu du site de Nicolas. Il remplit quatre champs et repart avec son lien. |
+| `/?c=<jeton>` | Le client, sur son dossier. |
+| `/demo` | Une démonstration sur les textes de la maquette, avec le sélecteur « Parcours ». |
+| `/prestataire` | Le tableau de bord, protégé par le jeton d'administration. |
+
+Le sélecteur « Parcours », en bas à droite de `/demo`, donne accès à tous les
+états, y compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre. Il
+ne s'affiche nulle part ailleurs : un visiteur ne doit jamais lire le dossier
+d'un client de démonstration en croyant que c'est le sien.
 
 | Écran | Fichier | Rôle |
 | --- | --- | --- |
-| Accueil | `src/screens/Accueil.tsx` | Entrée, et les deux raccourcis (version courte, dépôt de document) |
+| Page publique | `src/screens/Landing.tsx` | Ce qu'est le cadrage, et le formulaire qui l'ouvre |
+| Accueil | `src/screens/Accueil.tsx` | Entrée du client invité, et les deux raccourcis |
 | Entretien | `src/screens/Entretien.tsx` | La question en cours, le sommaire, l'aide et l'arbitrage |
 | Reformulation | `src/screens/Reformulation.tsx` | « Si je comprends bien : … », à confirmer avant d'avancer |
 | Chemin rapide | `src/screens/Rapide.tsx` | Dépôt d'un cahier des charges, et ce qu'il manque |
@@ -35,10 +47,11 @@ compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre.
 
 ## Où se trouve quoi
 
-- `shared/points.ts` — les huit points : questions, relances, réponses
-  probables, reformulations, pistes d'aide. C'est le script de l'entretien ;
-  le modifier change ce que le client lit. Partagé avec le serveur, qui s'en
-  sert pour repérer les contradictions.
+- `shared/points.ts` — les huit points. Chacun porte une **intention** (ce que
+  le point doit établir, jamais réécrite) et une formulation de référence
+  (question, relance, réponses probables) qui sert de repli quand le modèle est
+  absent. C'est la structure du dossier : la retoucher change ce qui est
+  garanti couvert. Partagé avec le serveur.
 - `shared/api.ts` — le contrat entre navigateur et serveur, défini une fois.
 - `src/state.ts` — la machine à états : navigation, brouillon, arbitrage,
   validation des reformulations.
@@ -51,8 +64,32 @@ compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre.
 
 `<Cadrage>` accepte trois réglages : `theme` (`auto` | `clair` | `sombre`),
 `accent` (couleur de marque, éclaircie automatiquement en thème sombre) et
-`afficherPlan` — à passer à `false` en production, le sélecteur d'écrans étant
-un outil de démonstration.
+`afficherPlan`, qui n'a d'effet que sur `/demo`.
+
+## Ouvrir un cadrage sans invitation
+
+`POST /api/cadrage` est la seule route publique en écriture : elle crée le
+cadrage et rend le lien. C'est ce que fait le formulaire de `/`.
+
+Elle est ouverte à tous, et chaque cadrage ouvre un entretien que le modèle
+facture. Deux bornes, dans `server/src/routes/inscription.ts` :
+
+- **trois ouvertures par heure et par connexion**, comptées sur une empreinte
+  salée de l'adresse IP — l'adresse elle-même n'est jamais écrite en base ;
+- **soixante par jour**, toutes connexions confondues. Au-delà, le visiteur est
+  renvoyé vers l'adresse de Nicolas plutôt que devant une page morte.
+
+Le formulaire n'affiche pas d'écran de confirmation : il pose le jeton dans
+l'URL avec `replaceState` puis entre directement dans la première question. Le
+visiteur a déjà cliqué une fois, on ne lui redemande pas de cliquer sur son
+propre lien — qui reste dans la barre d'adresse, prêt à être mis en favori.
+
+Le courriel saisi est conservé, mais **rien ne part encore** : si le client
+perd l'adresse de son onglet, il perd son dossier.
+
+`trustProxy` est activé côté Fastify : derrière le Caddy mutualisé, sans lui
+toutes les requêtes porteraient l'adresse du proxy et la limite vaudrait pour
+tout le monde à la fois.
 
 ## Le modèle
 
@@ -61,7 +98,7 @@ capacités, toutes côté serveur — la clé ne touche jamais le navigateur :
 
 | Capacité | Ce qu'elle remplace |
 | --- | --- |
-| Propositions | Les réponses probables, écrites pour le métier du client |
+| Ouverture | La question, sa relance et les réponses probables, écrites pour le métier du client |
 | Reformulation | « Si je comprends bien : … », tirée de ce qu'il a écrit |
 | Tension | La contradiction entre deux réponses, avec l'arbitrage proposé |
 | Aide | Trois pistes et leur conséquence chiffrée sur le projet |
@@ -153,8 +190,7 @@ que `/api/sante` répond.
 
 ### Tableau de bord du prestataire
 
-Accessible via le sélecteur « Parcours » hors session, ou directement en mode
-démonstration. Il demande le jeton d'administration au premier accès et le garde
+Sur `/prestataire`, ou via le sélecteur « Parcours » de `/demo`. Il demande le jeton d'administration au premier accès et le garde
 dans le `localStorage` — jamais dans une URL.
 
 ## Reste à faire
@@ -166,9 +202,11 @@ dans le `localStorage` — jamais dans une URL.
   binaires sont signalés au client (`fichiersIllisibles`) plutôt qu'ignorés en
   silence, mais leur contenu n'entre pas dans l'analyse. Le modèle accepte les
   images : une extraction PDF reste à ajouter.
-- **Courriel.** Le récapitulatif promet « vous recevrez une copie par
-  courriel » : rien n'est envoyé. La validation enregistre le dossier, elle ne
-  notifie personne — ni le client, ni Nicolas.
+- **Courriel.** Rien n'est envoyé nulle part. Le récapitulatif promet « vous
+  recevrez une copie par courriel », et l'ouverture en libre-service collecte
+  une adresse sans jamais s'en servir : le client qui perd son lien perd son
+  dossier, et Nicolas n'est pas prévenu qu'un cadrage s'est ouvert. C'est le
+  manque le plus visible depuis que la page publique existe.
 - **« C'est juste ».** Sur les blocs *déduit*, ce bouton n'enregistre pas
   l'accord du client (« Corriger » renvoie bien au point). Il faudrait un champ
   par déduction, comme `confirme` pour les reformulations.

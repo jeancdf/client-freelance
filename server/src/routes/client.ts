@@ -8,8 +8,8 @@ import { POINTS } from '../../../shared/points.ts';
 import type {
   AideGeneree,
   AnalyseGeneree,
+  OuvertureGeneree,
   PatchSession,
-  Propositions,
   PutReponse,
   SuiteReponse,
 } from '../../../shared/api.ts';
@@ -97,14 +97,14 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     },
   );
 
-  /** Les réponses probables, ajustées au métier et à ce qui est déjà écrit. */
+  /** La question, sa relance et les réponses probables, écrites pour ce client. */
   app.get<{ Params: ParamsToken & { point: string } }>(
-    '/api/cadrage/:token/point/:point/propositions',
-    async (req): Promise<Propositions> => {
+    '/api/cadrage/:token/point/:point/ouverture',
+    async (req): Promise<OuvertureGeneree> => {
       const ligne = charger(req.params.token);
       const point = exigerPoint(req.params.point);
-      const { valeur, origine } = await generation.propositions(db, ligne, point);
-      return { propositions: valeur, origine };
+      const { valeur, origine } = await generation.ouverture(db, ligne, point);
+      return { ...valeur, origine };
     },
   );
 

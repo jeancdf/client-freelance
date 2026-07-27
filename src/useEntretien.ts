@@ -1,7 +1,8 @@
 import { useCallback, useEffect, type Dispatch } from 'react';
+import { POINTS } from '../shared/points';
 import * as api from './lib/api';
 import type { Action, State } from './state';
-import { currentIndex } from './state';
+import { currentIndex, ouvertureOf } from './state';
 
 /**
  * Les échanges avec le serveur qui font attendre le client, par opposition à
@@ -23,26 +24,49 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
   const token = state.session?.token ?? null;
   const index = currentIndex(state);
 
-  // Les propositions du point en cours, chargées dès qu'il s'ouvre. Elles sont
-  // mises en cache côté serveur : revenir sur un point ne regénère rien.
+  // L'ouverture du point en cours : sa question, sa relance et ses réponses
+  // probables. Mise en cache côté serveur — revenir sur un point ne regénère
+  // rien, et le client y retrouve la question qu'il avait lue.
   useEffect(() => {
     if (!token || state.screen !== 'entretien') return;
-    if (state.propositions[index]) return;
+    if (state.ouvertures[index]) return;
 
     let annule = false;
-    api
-      .lirePropositions(token, index)
-      .then((r) => {
-        if (!annule) dispatch({ type: 'propositions', point: index, propositions: r.propositions });
-      })
-      .catch(() => {
-        // Sans propositions, le champ libre reste : l'entretien continue.
+
+    void (async () => {
+      // Un essai, puis un second après une seconde : le cas courant est un
+      // serveur qui vient de redémarrer, pas une panne.
+      for (let essai = 0; essai < 2 && !annule; essai++) {
+        try {
+          const r = await api.lireOuverture(token, index);
+          if (annule) return;
+          dispatch({
+            type: 'ouverture',
+            point: index,
+            ouverture: { question: r.question, relance: r.relance, propositions: r.propositions },
+          });
+          return;
+        } catch {
+          if (essai === 0) await new Promise((suite) => setTimeout(suite, 1000));
+        }
+      }
+
+      // Le serveur ne répond pas. On pose la formulation de référence : le
+      // client aura des questions moins ajustées, mais il aura son champ de
+      // réponse. L'attendre indéfiniment serait une page morte.
+      if (annule) return;
+      const point = POINTS[index];
+      dispatch({
+        type: 'ouverture',
+        point: index,
+        ouverture: { question: point.q, relance: point.hint, propositions: point.props },
       });
+    })();
 
     return () => {
       annule = true;
     };
-  }, [token, index, state.screen, state.propositions, dispatch]);
+  }, [token, index, state.screen, state.ouvertures, dispatch]);
 
   // Les pistes d'aide, seulement quand le client les demande : c'est l'appel
   // le plus cher et le moins souvent utile.
@@ -79,7 +103,7 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
   );
 
   const soumettre = useCallback(async () => {
-    const texte = state.draft.trim() || state.propositions[index]?.[0] || '';
+    const texte = state.draft.trim() || ouvertureOf(state, index).propositions[0] || '';
     if (!token || !texte) {
       dispatch({ type: 'submit' });
       return;
@@ -93,7 +117,7 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
       // tourner indéfiniment. `usePersistance` réessaiera en fond.
       dispatch({ type: 'occupe', valeur: false });
     }
-  }, [token, index, state.draft, state.propositions, ecrire, dispatch]);
+  }, [token, index, state, ecrire, dispatch]);
 
   const confirmer = useCallback(async () => {
     dispatch({ type: 'confirmReform' });

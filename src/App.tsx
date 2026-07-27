@@ -9,11 +9,12 @@ import {
 import { CadrageProvider } from './CadrageContext';
 import { applyAccent, applyThemePref, toggleTheme, type ThemePref } from './lib/theme';
 import * as api from './lib/api';
-import { jetonDuLien } from './lib/lien';
+import { estDemo, estPrestataire, jetonDuLien } from './lib/lien';
 import { initialState, reducer, type Screen } from './state';
 import { usePersistance } from './usePersistance';
 import { useEntretien } from './useEntretien';
 import { PlanNav } from './components/PlanNav';
+import { Landing } from './screens/Landing';
 import { Accueil } from './screens/Accueil';
 import { Reprise } from './screens/Reprise';
 import { Entretien } from './screens/Entretien';
@@ -29,12 +30,13 @@ export interface CadrageProps {
   theme?: ThemePref;
   /** Couleur d'accent de la marque. */
   accent?: string;
-  /** Sélecteur d'écrans, pour la démonstration. Masqué dès qu'un lien client
-   *  est ouvert : il donne accès à des écrans qui ne sont pas les siens. */
+  /** Sélecteur d'écrans, pour la démonstration. Réservé à `/demo` : ailleurs il
+   *  donne accès à des écrans qui ne sont pas ceux du visiteur. */
   afficherPlan?: boolean;
 }
 
 const SCREENS: Record<Screen, ComponentType> = {
+  landing: Landing,
   accueil: Accueil,
   reprise: Reprise,
   entretien: Entretien,
@@ -49,8 +51,15 @@ const SCREENS: Record<Screen, ComponentType> = {
 type Chargement = 'demonstration' | 'chargement' | 'pret' | 'introuvable';
 
 export function Cadrage({ theme = 'auto', accent, afficherPlan = true }: CadrageProps) {
-  const [state, dispatch] = useReducer(reducer, initialState);
   const token = useMemo(() => jetonDuLien(), []);
+  const demo = useMemo(() => estDemo(), []);
+  // Sans lien : `/demo` montre la maquette, `/prestataire` le tableau de bord,
+  // et tout le reste la page publique. Un visiteur qui arrive de nulle part ne
+  // doit jamais tomber sur le dossier d'un client de démonstration.
+  const [state, dispatch] = useReducer(reducer, initialState, (depart) => {
+    if (token || demo) return depart;
+    return { ...depart, screen: (estPrestataire() ? 'dash' : 'landing') as Screen };
+  });
   const [chargement, setChargement] = useState<Chargement>(
     token ? 'chargement' : 'demonstration',
   );
@@ -126,7 +135,7 @@ export function Cadrage({ theme = 'auto', accent, afficherPlan = true }: Cadrage
     <CadrageProvider value={value}>
       <div className="app">
         <Screen />
-        {afficherPlan && !state.session && <PlanNav />}
+        {afficherPlan && demo && !state.session && <PlanNav />}
       </div>
     </CadrageProvider>
   );
@@ -150,9 +159,9 @@ function LienInvalide() {
         <p className="lbl etat-simple__kicker">Lien introuvable</p>
         <h1 className="serif etat-simple__titre">Ce lien ne correspond à aucun cadrage.</h1>
         <p className="etat-simple__texte">
-          Il a peut-être été remplacé depuis. Écrivez à{' '}
-          <a href="mailto:nicolas@studiocazals.fr">nicolas@studiocazals.fr</a> et vous en recevrez
-          un nouveau.
+          Il a peut-être été remplacé depuis. Vous pouvez{' '}
+          <a href="/">en ouvrir un nouveau</a>, ou écrire à{' '}
+          <a href="mailto:nicolas@studiocazals.fr">nicolas@studiocazals.fr</a>.
         </p>
       </main>
     </div>

@@ -8,14 +8,14 @@
 
 import { createHash } from 'node:crypto';
 import { POINTS } from '../../shared/points.ts';
-import type { Aide, Analyse, PointAnalyse, Tension } from '../../shared/api.ts';
+import type { Aide, Analyse, Ouverture, PointAnalyse, Tension } from '../../shared/api.ts';
 import type { Base } from './db.ts';
 import * as llm from './llm.ts';
 import {
   promptAide,
   promptAnalyse,
   promptDeduction,
-  promptPropositions,
+  promptOuverture,
   promptReformulation,
   promptTension,
   type Contexte,
@@ -106,34 +106,46 @@ async function obtenir<T>(
   }
 }
 
-// ------------------------------------------------------------ propositions --
+// --------------------------------------------------------------- ouverture --
 
-const SCHEMA_PROPOSITIONS = llm.objet({
+const SCHEMA_OUVERTURE = llm.objet({
+  question: llm.texte,
+  relance: llm.texte,
   propositions: llm.liste(llm.texte, 3, 4),
 });
 
-export function propositions(db: Base, ligne: LigneCadrage, index: number) {
+/**
+ * Ce qui s'affiche à l'ouverture d'un point. La question elle-même est écrite
+ * pour ce client : les huit intentions sont la structure du dossier, leur
+ * formulation ne l'est pas.
+ */
+export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
   const point = POINTS[index];
   const contexte = contexteDe(db, ligne);
 
-  return obtenir<string[]>(
+  return obtenir<Ouverture>(
     db,
     ligne.id,
     index,
-    'propositions',
-    // Une fois écrites pour ce client, elles ne bougent plus : il doit
-    // retrouver les mêmes en revenant sur le point.
+    'ouverture',
+    // Une fois écrite pour ce client, l'ouverture ne bouge plus : il doit
+    // retrouver la même question en revenant sur le point.
     empreinte(`${ligne.client_metier}|${ligne.demande}`),
     async () => {
       const combien = point.props.length > 3 ? 4 : 3;
-      const { valeur } = await llm.generer<{ propositions: string[] }>(
-        promptPropositions(contexte, point, combien),
-        'propositions',
-        SCHEMA_PROPOSITIONS,
+      const { valeur } = await llm.generer<Ouverture>(
+        promptOuverture(contexte, point, combien),
+        'ouverture',
+        SCHEMA_OUVERTURE,
       );
-      return valeur.propositions;
+      // Une question vide passerait le schéma : on préfère la référence.
+      return {
+        question: valeur.question.trim() || point.q,
+        relance: valeur.relance.trim() || point.hint,
+        propositions: valeur.propositions,
+      };
     },
-    () => point.props,
+    () => ({ question: point.q, relance: point.hint, propositions: point.props }),
   );
 }
 

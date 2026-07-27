@@ -51,6 +51,11 @@ export interface Session {
   creeLe: string;
   majLe: string;
   valideLe: string | null;
+  /**
+   * Quand le client est entré dans l'entretien. Non nul, il ne repasse plus par
+   * la page d'accueil : il a déjà lu de quoi il s'agit.
+   */
+  commenceLe: string | null;
   /** Temps passé sur l'entretien, pauses longues exclues. */
   dureeMs: number;
   /**
@@ -123,6 +128,18 @@ export interface CreationCadrage {
   demande?: string;
 }
 
+/**
+ * Ce qu'un visiteur remplit lui-même sur la page d'accueil. Mêmes champs que
+ * la création côté prestataire, mais l'activité et la demande sont exigées :
+ * sans elles le modèle n'a rien pour écrire les questions.
+ */
+export interface Inscription {
+  nom: string;
+  metier: string;
+  demande: string;
+  courriel: string;
+}
+
 // --------------------------------------------------- contenu généré ------ //
 
 /** D'où vient le contenu affiché : utile en développement, jamais montré au client. */
@@ -146,8 +163,18 @@ export interface Tension {
   optionB: string;
 }
 
-export interface Propositions {
+/**
+ * L'ouverture d'un point : la question telle qu'elle est posée à CE client, sa
+ * relance, et les réponses probables. Les trois sortent du même appel — la
+ * question et les réponses doivent se répondre l'une l'autre.
+ */
+export interface Ouverture {
+  question: string;
+  relance: string;
   propositions: string[];
+}
+
+export interface OuvertureGeneree extends Ouverture {
   origine: Origine;
 }
 

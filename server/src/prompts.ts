@@ -25,6 +25,7 @@ const VOIX = `Tu assistes Nicolas Cazals, développeur freelance, pendant l'entr
 Règles absolues :
 - Tu écris en français courant, à hauteur du client. Jamais de jargon technique, jamais de vocabulaire de consultant ("synergie", "solution", "optimiser", "process").
 - Tu écris avec SES mots et SON métier, pas avec des formules génériques.
+- Tu vouvoies le client, toujours : "vous", jamais "tu".
 - Tu n'inventes jamais un fait que le client n'a pas donné.
 - Phrases courtes. Ton direct et concret, sans flatterie ni enthousiasme.
 - Jamais de tirets cadratins pour ponctuer une phrase.`;
@@ -51,14 +52,17 @@ function portrait(c: Contexte): string {
   return lignes.join('\n');
 }
 
-// ------------------------------------------------------------ propositions --
+// --------------------------------------------------------------- ouverture --
 
 /**
- * Les réponses probables affichées sous la question. C'est le cœur du confort :
- * le client doit pouvoir cliquer plutôt qu'écrire, donc elles doivent ressembler
- * à ce que LUI dirait.
+ * Tout ce qui s'affiche à l'ouverture d'un point : la question, sa relance, et
+ * les réponses probables. Un seul appel, parce que les trois doivent se tenir —
+ * des réponses écrites pour une autre formulation de la question sonnent faux.
+ *
+ * Le point garde son intention (les huit sont la structure du dossier) ; c'est
+ * sa formulation qui s'ajuste au métier du client.
  */
-export function promptPropositions(c: Contexte, point: Point, combien: number): Message[] {
+export function promptOuverture(c: Contexte, point: Point, combien: number): Message[] {
   return [
     { role: 'system', content: VOIX },
     {
@@ -66,15 +70,20 @@ export function promptPropositions(c: Contexte, point: Point, combien: number): 
       content: `${portrait(c)}
 
 Point ${point.num} — ${point.label}.
-Question posée au client : « ${point.q} »
-Relance affichée : « ${point.hint} »
+Ce que ce point doit établir, sans exception : ${point.intention}
 
-Écris ${combien} réponses probables, à la première personne, telles que CE client les formulerait à l'oral.
+Formulation de référence, écrite pour un autre client : « ${point.q} »
+Relance de référence : « ${point.hint} »
+
+Écris pour CE client :
+1. La question, reformulée avec son vocabulaire et ses réalités de métier. Elle doit chercher exactement la même chose que la référence, sans élargir ni rétrécir.
+2. La relance, une phrase, qui dit quoi raconter quand on ne sait pas par où commencer.
+3. ${combien} réponses probables, à la première personne, telles que LUI les formulerait à l'oral.
 
 Contraintes :
-- Une à deux phrases chacune, concrètes, ancrées dans son métier.
-- Elles doivent être nettement différentes les unes des autres : pas trois nuances de la même réponse.
-- Aucune ne doit contredire ce qu'il a déjà écrit.
+- La question et la relance vouvoient le client. Elles portent sur du concret : pas de "votre besoin", pas de "votre problématique". La question se termine par un point d'interrogation.
+- Les réponses font une à deux phrases, nettement différentes les unes des autres : pas trois nuances de la même.
+- Aucune ne contredit ce qu'il a déjà écrit.
 - N'utilise pas le mot "solution" ni le mot "outil" en début de phrase.`,
     },
   ];

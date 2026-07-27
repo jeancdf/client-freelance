@@ -2,7 +2,8 @@ import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
 
 export function Accueil() {
-  const { dispatch } = useCadrage();
+  const { state, dispatch } = useCadrage();
+  const nom = state.session?.client.nom ?? 'Camille Dorval';
 
   return (
     <main className="page">
@@ -10,7 +11,7 @@ export function Accueil() {
 
       <div className="accueil__grid">
         <div className="accueil__intro">
-          <p className="lbl accueil__kicker">Entretien de cadrage · Camille Dorval</p>
+          <p className="lbl accueil__kicker">Entretien de cadrage · {nom}</p>
           <h1 className="serif accueil__title">
             Avant notre rendez-vous,
             <br />

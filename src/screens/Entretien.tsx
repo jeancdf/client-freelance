@@ -1,7 +1,7 @@
 import { useCadrage } from '../CadrageContext';
 import { AppHeader } from '../components/Headers';
 import { POINTS } from '../../shared/points';
-import { answerOf, currentIndex } from '../state';
+import { answerOf, currentIndex, ouvertureOf } from '../state';
 
 const LAST = POINTS.length - 1;
 
@@ -19,16 +19,16 @@ export function Entretien() {
 
   const draft = state.draft.trim();
 
-  // Le contenu généré pour CE client quand il est arrivé, celui de la maquette
-  // sinon : l'entretien ne s'arrête jamais faute de modèle.
-  // Sur un dossier réel, on n'affiche rien tant que les propositions ajustées
-  // ne sont pas là : mieux vaut un champ vide que les réponses d'un autre métier.
-  const propositions = state.propositions[index] ?? (state.session ? [] : point.props);
+  // Le contenu écrit pour CE client, celui de la maquette sinon : l'entretien
+  // ne s'arrête jamais faute de modèle. Sur un dossier réel, on attend plutôt
+  // que d'afficher les réponses probables d'un autre métier.
+  const ouverture = ouvertureOf(state, index);
+  const enAttente = Boolean(state.session) && !state.ouvertures[index];
+  const propositions = enAttente ? [] : ouverture.propositions;
   const aide = state.aide[index] ?? {
     titre: point.help.title,
     pistes: point.help.items.map((h) => ({ texte: h.text, effet: h.effect })),
   };
-  const enAttenteDesPropositions = Boolean(state.session) && !state.propositions[index];
 
   return (
     <div>
@@ -156,8 +156,8 @@ export function Entretien() {
             <p className="lbl question__header">
               Point {point.num} — {point.label}
             </p>
-            <h1 className="serif question__title">{point.q}</h1>
-            {state.mode !== 'court' && <p className="question__hint">{point.hint}</p>}
+            <h1 className="serif question__title">{ouverture.question}</h1>
+            {state.mode !== 'court' && <p className="question__hint">{ouverture.relance}</p>}
           </div>
 
           {!state.help && (
@@ -169,8 +169,8 @@ export function Entretien() {
                     : 'Réponses probables — cliquez, puis corrigez à votre main'}
                 </p>
                 <div className="props__list">
-                  {enAttenteDesPropositions && (
-                    <p className="props__attente">Je prépare des réponses adaptées à votre métier…</p>
+                  {enAttente && (
+                    <p className="props__attente">J'écris ce point pour votre métier…</p>
                   )}
                   {propositions.map((text) => (
                     <button

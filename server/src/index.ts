@@ -3,9 +3,10 @@ import Fastify from 'fastify';
 import multipart from '@fastify/multipart';
 import { cheminBase, config, jetonAdmin } from './config.ts';
 import { ouvrirBase } from './db.ts';
-import { ErreurRequete } from './repo.ts';
+import { brancherErreurs } from './erreurs.ts';
 import { routesClient } from './routes/client.ts';
 import { routesAdmin } from './routes/admin.ts';
+import { routesInscription } from './routes/inscription.ts';
 
 const db = ouvrirBase(cheminBase);
 const { jeton, genere } = jetonAdmin();
@@ -24,26 +25,19 @@ function transportJournal(): { target: string } | undefined {
 const app = Fastify({
   logger: { transport: transportJournal() },
   bodyLimit: 1024 * 1024,
+  // Derrière le Caddy mutualisé : sans ceci toutes les requêtes portent
+  // l'adresse du proxy, et la limite de créations vaudrait pour tout le monde
+  // à la fois.
+  trustProxy: true,
 });
 
 await app.register(multipart, { limits: { fileSize: config.tailleMaxFichier, files: 1 } });
 
-app.setErrorHandler((erreur: unknown, _req, reply) => {
-  if (erreur instanceof ErreurRequete) {
-    return reply.code(erreur.code).send({ erreur: erreur.message });
-  }
-
-  app.log.error(erreur);
-  const brut = erreur as { statusCode?: number; message?: string };
-  const code = typeof brut.statusCode === 'number' && brut.statusCode >= 400 ? brut.statusCode : 500;
-  // Une erreur interne ne dit rien de plus au client : le détail est au journal.
-  return reply.code(code).send({
-    erreur: code === 500 ? 'Erreur interne.' : (brut.message ?? 'Requête invalide.'),
-  });
-});
+brancherErreurs(app);
 
 routesClient(app, db);
 routesAdmin(app, db, jeton);
+routesInscription(app, db, jeton);
 
 app.get('/api/sante', async () => ({ ok: true }));
 

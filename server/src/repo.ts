@@ -39,6 +39,7 @@ interface LigneBase {
   cree_le: string;
   maj_le: string;
   valide_le: string | null;
+  commence_le: string | null;
 }
 
 interface LigneReponse {
@@ -160,6 +161,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     reponses,
     fichiers: fichiersDe(db, ligne.id).map(versFichier),
     creeLe: ligne.cree_le,
+    commenceLe: ligne.commence_le,
     majLe: ligne.maj_le,
     valideLe: ligne.valide_le,
     dureeMs: ligne.duree_ms,
@@ -170,7 +172,15 @@ export function session(db: Base, ligne: LigneBase): Session {
 
 // ----------------------------------------------------------------- écriture --
 
-export function creer(db: Base, entree: CreationCadrage): LigneBase {
+/** Ce que le cadrage retient de son origine, quand le client l'ouvre lui-même. */
+export interface Provenance {
+  courriel: string;
+  ipEmpreinte: string;
+  /** Le client est entré dans l'entretien dès l'ouverture, sans page d'accueil. */
+  dejaEntre?: boolean;
+}
+
+export function creer(db: Base, entree: CreationCadrage, provenance?: Provenance): LigneBase {
   const nom = entree.nom.trim();
   if (!nom) throw new ErreurRequete(400, 'Le nom du client est obligatoire.');
 
@@ -179,11 +189,33 @@ export function creer(db: Base, entree: CreationCadrage): LigneBase {
   const now = maintenant();
 
   db.prepare(
-    `INSERT INTO cadrage (id, token, client_nom, client_metier, demande, cree_le, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, token, nom, entree.metier?.trim() ?? '', entree.demande?.trim() ?? '', now, now);
+    `INSERT INTO cadrage (id, token, client_nom, client_metier, demande, courriel, ip_empreinte, commence_le, cree_le, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    token,
+    nom,
+    entree.metier?.trim() ?? '',
+    entree.demande?.trim() ?? '',
+    provenance?.courriel ?? '',
+    provenance?.ipEmpreinte ?? '',
+    provenance?.dejaEntre ? now : null,
+    now,
+    now,
+  );
 
   return parId(db, id)!;
+}
+
+/**
+ * Combien de cadrages cette empreinte a ouverts depuis `depuis`. Sert à borner
+ * les créations en rafale : chacune ouvre un entretien que le modèle paie.
+ */
+export function creationsDepuis(db: Base, ipEmpreinte: string, depuis: string): number {
+  const ligne = db
+    .prepare('SELECT COUNT(*) AS n FROM cadrage WHERE ip_empreinte = ? AND cree_le >= ?')
+    .get(ipEmpreinte, depuis) as { n: number } | undefined;
+  return ligne?.n ?? 0;
 }
 
 const CHAMPS_PATCH = {

@@ -14,6 +14,24 @@ export function jetonDuLien(url = window.location.href): string | null {
   return chemin ? chemin[1] : null;
 }
 
+/**
+ * La démonstration, sur `/demo` seulement. Ailleurs, un visiteur sans lien
+ * arrive sur la page d'accueil et ouvre son cadrage lui-même : il ne doit
+ * jamais tomber sur les textes de la maquette en croyant que c'est son dossier.
+ */
+export function estDemo(url = window.location.href): boolean {
+  return /^\/demo\/?$/.test(new URL(url).pathname);
+}
+
+/**
+ * Le tableau de bord de Nicolas. Il a son adresse propre : il était atteint par
+ * le sélecteur d'écrans, qui ne vit plus que sur `/demo`. Le jeton reste exigé
+ * à l'ouverture — l'adresse n'est pas un secret.
+ */
+export function estPrestataire(url = window.location.href): boolean {
+  return /^\/prestataire\/?$/.test(new URL(url).pathname);
+}
+
 /** Le jeton du prestataire, gardé sur son poste — jamais dans une URL. */
 export function jetonAdmin(): string | null {
   try {

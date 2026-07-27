@@ -1,9 +1,10 @@
 import { POINTS } from '../shared/points';
-import type { Aide, Client, Fichier, Mode, Session, Statut, Tension, Voie } from '../shared/api';
+import type { Aide, Client, Fichier, Mode, Ouverture, Session, Statut, Tension, Voie } from '../shared/api';
 
 export type { Mode, Voie };
 
 export type Screen =
+  | 'landing'
   | 'accueil'
   | 'entretien'
   | 'reform'
@@ -55,8 +56,12 @@ export interface State {
   lien2: string;
   session: SessionMeta | null;
 
-  /** Réponses probables générées pour ce client, par point. */
-  propositions: Record<number, string[]>;
+  /**
+   * La question, sa relance et les réponses probables, écrites pour ce client.
+   * Absente tant que le serveur n'a pas répondu : l'écran affiche alors la
+   * formulation de référence du point.
+   */
+  ouvertures: Record<number, Ouverture>;
   /** Pistes d'aide générées, par point. */
   aide: Record<number, Aide>;
   /** Ce qui a été déduit de chaque réponse, pour le récapitulatif. */
@@ -98,7 +103,7 @@ export const initialState: State = {
   lien1: 'https://camilledorval.fr',
   lien2: '',
   session: null,
-  propositions: {},
+  ouvertures: {},
   aide: {},
   deductions: {},
   reformulations: {},
@@ -110,7 +115,7 @@ export const initialState: State = {
 
 export type Action =
   | { type: 'hydrate'; token: string; session: Session }
-  | { type: 'propositions'; point: number; propositions: string[] }
+  | { type: 'ouverture'; point: number; ouverture: Ouverture }
   | { type: 'aide'; point: number; aide: Aide }
   | { type: 'occupe'; valeur: boolean }
   | {
@@ -150,9 +155,25 @@ export type Action =
   | { type: 'setLien1'; value: string }
   | { type: 'setLien2'; value: string };
 
+/**
+ * Ce qui s'affiche pour un point. Tant que le serveur n'a rien rendu, c'est la
+ * formulation de référence : l'entretien ne reste jamais muet en attendant le
+ * modèle.
+ */
+export function ouvertureOf(state: State, index: number): Ouverture {
+  const point = POINTS[index];
+  return (
+    state.ouvertures[index] ?? {
+      question: point.q,
+      relance: point.hint,
+      propositions: point.props,
+    }
+  );
+}
+
 /** La réponse retenue pour un point, ou la première proposition à défaut. */
 export function answerOf(state: State, index: number): string {
-  return state.answers[index] ?? POINTS[index].props[0];
+  return state.answers[index] ?? ouvertureOf(state, index).propositions[0];
 }
 
 /** L'index du point en cours, borné au dernier point. */
@@ -244,7 +265,10 @@ function goScreen(state: State, screen: Screen, extra: Partial<State> = {}): Sta
 function ecranDeReprise(session: Session, aDesReponses: boolean): Screen {
   if (session.statut === 'valide') return 'fin';
   if (aDesReponses || session.draft) return 'reprise';
-  return session.voie === 'rapide' ? 'rapide' : 'accueil';
+  if (session.voie === 'rapide') return 'rapide';
+  // Celui qui est passé par la page publique a déjà lu de quoi il s'agit : le
+  // renvoyer sur l'accueil lui redemanderait de cliquer pour rien.
+  return session.commenceLe ? 'entretien' : 'accueil';
 }
 
 export function reducer(state: State, action: Action): State {
@@ -297,8 +321,8 @@ export function reducer(state: State, action: Action): State {
       };
     }
 
-    case 'propositions':
-      return { ...state, propositions: { ...state.propositions, [action.point]: action.propositions } };
+    case 'ouverture':
+      return { ...state, ouvertures: { ...state.ouvertures, [action.point]: action.ouverture } };
 
     case 'aide':
       return { ...state, aide: { ...state.aide, [action.point]: action.aide } };

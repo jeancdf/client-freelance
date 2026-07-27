@@ -4,8 +4,9 @@ import type {
   CadrageCree,
   CreationCadrage,
   Fichier,
+  Inscription,
+  OuvertureGeneree,
   PatchSession,
-  Propositions,
   PutReponse,
   ReponseCadrages,
   Session,
@@ -45,6 +46,12 @@ const json = (methode: string, corps: unknown): RequestInit => ({
   body: JSON.stringify(corps),
 });
 
+// ------------------------------------------------------------- inscription --
+
+/** Ouvre un cadrage depuis la page d'accueil, sans invitation ni compte. */
+export const ouvrirCadrage = (entree: Inscription) =>
+  requete<CadrageCree>('/cadrage', json('POST', entree));
+
 // ------------------------------------------------------------------ client --
 
 export const lireSession = (token: string) => requete<Session>(`/cadrage/${token}`);
@@ -59,8 +66,8 @@ export const patcher = (token: string, patch: PatchSession) =>
 export const ecrireReponse = (token: string, point: number, entree: PutReponse) =>
   requete<SuiteReponse>(`/cadrage/${token}/reponse/${point}`, json('PUT', entree));
 
-export const lirePropositions = (token: string, point: number) =>
-  requete<Propositions>(`/cadrage/${token}/point/${point}/propositions`);
+export const lireOuverture = (token: string, point: number) =>
+  requete<OuvertureGeneree>(`/cadrage/${token}/point/${point}/ouverture`);
 
 export const lireAide = (token: string, point: number) =>
   requete<AideGeneree>(`/cadrage/${token}/point/${point}/aide`);

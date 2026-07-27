@@ -23,7 +23,14 @@ export interface Point {
   /** Numéro romain affiché (I…VIII). */
   num: string;
   label: string;
-  /** La question posée. */
+  /**
+   * Ce que le point doit établir, quelle que soit la façon dont on le demande.
+   * C'est la partie durable du script : la question est reformulée pour chaque
+   * client, l'intention ne bouge jamais — sinon le dossier perd sa garantie de
+   * couverture.
+   */
+  intention: string;
+  /** La question posée, formulation de référence. */
   q: string;
   /** La relance en italique sous la question. */
   hint: string;
@@ -43,6 +50,8 @@ export interface Point {
 export const POINTS: Point[] = [
   {
     num: 'I', label: 'Le problème',
+    intention:
+      "le déclencheur précis de la démarche, et ce que le problème lui coûte aujourd'hui en temps, en argent ou en clients perdus.",
     q: "Qu'est-ce qui vous a fait vous dire, un jour précis, qu'il fallait faire quelque chose ?",
     hint: "Racontez le dernier moment où ça vous a coûté cher — en temps, en client, en énervement.",
     props: [
@@ -62,6 +71,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'II', label: 'Les utilisateurs',
+    intention:
+      "qui se servira de l'outil, à quel moment de sa journée, avec quelle aisance du numérique, et qui n'y touchera pas.",
     q: "Qui va se servir de cet outil, concrètement, et à quel moment de sa journée ?",
     hint: "Vous, vos clients, quelqu'un d'autre ? Dites-moi aussi ceux qui ne s'en serviront pas.",
     props: [
@@ -82,6 +93,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'III', label: 'Le fonctionnement actuel',
+    intention:
+      "le déroulé actuel, étape par étape, avec quels outils, et l'endroit exact où ça lui coûte du temps.",
     q: "Racontez-moi comment ça se passe aujourd'hui, du moment où un client vous demande un programme jusqu'à ce qu'il l'ait entre les mains.",
     hint: "Je cherche le détail concret : qui fait quoi, avec quels outils, et où ça vous coûte du temps.",
     props: [
@@ -101,6 +114,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'IV', label: "L'existant à reprendre",
+    intention:
+      "ce qui existe déjà autour de son activité et qui devra être gardé, raccordé, ou laissé strictement de côté.",
     q: "Qu'est-ce qui existe déjà autour de votre activité et qui devra rester, ou être repris ?",
     hint: "Site, fichiers, logiciel de facturation, vidéos, tableur : même bricolé, ça compte.",
     props: [
@@ -120,6 +135,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'V', label: 'Le périmètre',
+    intention:
+      "la seule chose sans laquelle le projet ne sert à rien : le cœur, pas la liste complète.",
     q: "Si on ne construisait qu'une seule chose, celle sans laquelle ça ne sert à rien, laquelle ?",
     hint: "On ajoutera le reste ensuite. Je cherche le cœur, pas la liste complète.",
     props: [
@@ -141,6 +158,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'VI', label: 'Le hors-périmètre',
+    intention:
+      "ce que le projet ne fera pas dans cette première version, dit explicitement, pour protéger le budget.",
     q: "Qu'est-ce que ce projet ne fera pas ? C'est la question qui protège votre budget.",
     hint: "Ce dont vous ne voulez pas, ou ce qui peut attendre une deuxième version.",
     props: [
@@ -160,6 +179,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'VII', label: 'Les contraintes',
+    intention:
+      "ce qui est imposé et sur quoi le prestataire n'a pas la main : une date, un budget, un outil à garder, une personne à convaincre.",
     q: "Qu'est-ce qui est imposé, et sur quoi je n'ai pas la main ?",
     hint: "Une date, un budget, un outil à garder, une personne à convaincre.",
     props: [
@@ -180,6 +201,8 @@ export const POINTS: Point[] = [
   },
   {
     num: 'VIII', label: 'La définition du succès',
+    intention:
+      "le signe concret auquel il verra, dans six mois, que ça valait le coup.",
     q: "Dans six mois, à quoi verrez-vous que ça valait le coup ?",
     hint: "Un signe concret, quelque chose que vous pourrez constater sans y réfléchir.",
     props: [

@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS cadrage (
   lien2         TEXT NOT NULL DEFAULT '',
   statut        TEXT NOT NULL DEFAULT 'en_cours',
   duree_ms      INTEGER NOT NULL DEFAULT 0,
+  courriel      TEXT NOT NULL DEFAULT '',
+  ip_empreinte  TEXT NOT NULL DEFAULT '',
+  commence_le   TEXT,
   cree_le       TEXT NOT NULL,
   maj_le        TEXT NOT NULL,
   valide_le     TEXT
@@ -67,6 +70,33 @@ CREATE TABLE IF NOT EXISTS fichier (
 CREATE INDEX IF NOT EXISTS fichier_cadrage ON fichier (cadrage_id);
 `;
 
+/**
+ * Les colonnes ajoutées après coup. CREATE TABLE IF NOT EXISTS ne touche pas
+ * une table déjà là : sans ceci, une base de production resterait au schéma du
+ * premier jour. Chaque entrée est rejouable sans dommage.
+ */
+const AJOUTS: Array<{ table: string; colonne: string; definition: string }> = [
+  // Le visiteur qui ouvre son cadrage lui-même laisse son adresse : c'est par
+  // là que Nicolas le rappelle, et par là qu'on lui renvoie son lien.
+  { table: 'cadrage', colonne: 'courriel', definition: "TEXT NOT NULL DEFAULT ''" },
+  // Empreinte de l'adresse IP, jamais l'adresse : elle ne sert qu'à limiter
+  // les créations en rafale, et une empreinte suffit à compter.
+  { table: 'cadrage', colonne: 'ip_empreinte', definition: "TEXT NOT NULL DEFAULT ''" },
+  // Posé quand le client est déjà entré dans l'entretien : en revenant sur son
+  // lien il reprend la question, il ne relit pas la page d'accueil.
+  { table: 'cadrage', colonne: 'commence_le', definition: 'TEXT' },
+];
+
+function migrer(db: DatabaseSync): void {
+  for (const ajout of AJOUTS) {
+    const colonnes = db.prepare(`PRAGMA table_info(${ajout.table})`).all() as unknown as Array<{
+      name: string;
+    }>;
+    if (colonnes.some((c) => c.name === ajout.colonne)) continue;
+    db.exec(`ALTER TABLE ${ajout.table} ADD COLUMN ${ajout.colonne} ${ajout.definition}`);
+  }
+}
+
 export function ouvrirBase(fichier: string): DatabaseSync {
   mkdirSync(dirname(fichier), { recursive: true });
   const db = new DatabaseSync(fichier);
@@ -75,6 +105,7 @@ export function ouvrirBase(fichier: string): DatabaseSync {
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  migrer(db);
   return db;
 }
 
