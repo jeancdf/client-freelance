@@ -8,6 +8,14 @@ export type Mode = 'long' | 'court';
 /** Par où le client est passé : l'entretien complet, ou le dépôt de document. */
 export type Voie = 'entretien' | 'rapide';
 
+/**
+ * Où en est le client quand il ouvre son cadrage. Ce n'est pas une donnée
+ * décorative : elle décide du ton des questions et de la profondeur des
+ * relances. Quelqu'un qui a des specs et quelqu'un qui a une gêne quotidienne
+ * n'ont pas le même entretien.
+ */
+export type Maturite = 'idee' | 'forme' | 'specs';
+
 export type Statut = 'en_cours' | 'valide';
 
 export interface Reponse {
@@ -45,6 +53,8 @@ export interface Session {
   lien1: string;
   lien2: string;
   statut: Statut;
+  /** Où en était le client à l'ouverture ; vide pour un cadrage créé à la main. */
+  maturite: Maturite | '';
   /** Réponses par index de point (0 à 7), en clés de chaîne pour JSON. */
   reponses: Record<string, Reponse>;
   fichiers: Fichier[];
@@ -99,6 +109,7 @@ export interface LigneCadrage {
   enCours: number | null;
   /** Une contradiction a été relevée et n'a pas encore été tranchée. */
   tensionOuverte: boolean;
+  maturite: Maturite | '';
   dureeMs: number;
   majLe: string;
   valideLe: string | null;
@@ -138,6 +149,7 @@ export interface Inscription {
   metier: string;
   demande: string;
   courriel: string;
+  maturite: Maturite;
 }
 
 // --------------------------------------------------- contenu généré ------ //

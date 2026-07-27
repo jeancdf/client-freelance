@@ -8,6 +8,7 @@
  */
 
 import { POINTS, type Point } from '../../shared/points.ts';
+import type { Maturite } from '../../shared/api.ts';
 import type { Message } from './llm.ts';
 
 export interface Contexte {
@@ -18,6 +19,8 @@ export interface Contexte {
   reponses: Record<number, string>;
   /** Le document ou les notes déposés, s'il y en a. */
   brief?: string;
+  /** Où le client en est, tel qu'il l'a déclaré en ouvrant son cadrage. */
+  maturite?: Maturite | '';
 }
 
 const VOIX = `Tu assistes Nicolas Cazals, développeur freelance, pendant l'entretien de cadrage d'un projet client.
@@ -30,9 +33,22 @@ Règles absolues :
 - Phrases courtes. Ton direct et concret, sans flatterie ni enthousiasme.
 - Jamais de tirets cadratins pour ponctuer une phrase.`;
 
+/**
+ * Ce que change le point de départ déclaré. Un client qui subit un problème
+ * quotidien et un client qui arrive avec un cahier des charges ne doivent pas
+ * lire les mêmes questions : le premier se ferme si on lui demande de choisir,
+ * le second s'agace si on lui réexplique son propre projet.
+ */
+const OU_IL_EN_EST: Record<Maturite, string> = {
+  idee: `Il sait ce qui ne va pas dans son travail, pas comment y remédier. Pars de son quotidien et de ce que le problème lui coûte. Ne lui demande jamais de trancher une question de fabrication, et ne présuppose aucune forme (site, application, automatisation) qu'il n'a pas nommée lui-même.`,
+  forme: `Il a déjà une idée assez précise de ce à quoi ça doit ressembler. Tu peux l'interroger sur le parcours, les écrans, ce que voit chaque personne. Reste sans jargon, et fais-lui dire le POURQUOI de ce qu'il imagine : c'est là qu'est le cadrage.`,
+  specs: `Il arrive avec un document ou des exigences déjà écrites. Va droit au but, ne lui refais pas raconter ce qu'il a déjà formulé. Cherche ce que son document ne dit pas : les arbitrages, le hors-périmètre, les contraintes tues.`,
+};
+
 function portrait(c: Contexte): string {
   const lignes = [`Client : ${c.nom}${c.metier ? `, ${c.metier}` : ''}.`];
   if (c.demande) lignes.push(`Sa demande de départ : « ${c.demande} ».`);
+  if (c.maturite) lignes.push(`Où il en est : ${OU_IL_EN_EST[c.maturite]}`);
 
   const ecrits = Object.entries(c.reponses)
     .map(([k, v]) => [Number(k), v] as const)

@@ -22,7 +22,7 @@ Quatre adresses, et rien d'autre :
 
 | Adresse | Qui l'ouvre |
 | --- | --- |
-| `/` | Un visiteur venu du site de Nicolas. Il remplit quatre champs et repart avec son lien. |
+| `/` | Un visiteur venu du site de Nicolas. Il se présente, dit où il en est, et entre dans l'entretien. |
 | `/?c=<jeton>` | Le client, sur son dossier. |
 | `/demo` | Une démonstration sur les textes de la maquette, avec le sélecteur « Parcours ». |
 | `/prestataire` | Le tableau de bord, protégé par le jeton d'administration. |
@@ -70,6 +70,16 @@ d'un client de démonstration en croyant que c'est le sien.
 
 `POST /api/cadrage` est la seule route publique en écriture : elle crée le
 cadrage et rend le lien. C'est ce que fait le formulaire de `/`.
+
+Le visiteur y déclare **où il en est**, en trois choix. Ce n'est pas une case
+de convenance : la valeur part dans le contexte de chaque génération et change
+le ton des questions, et le troisième choix mène ailleurs.
+
+| Choix | Ce que ça change |
+| --- | --- |
+| `idee` — sait ce qui le gêne, pas comment le régler | Questions ancrées dans son quotidien, aucune décision de fabrication à prendre, aucune forme présupposée |
+| `forme` — a une idée précise de ce qu'il veut | On peut parler parcours et écrans, en cherchant le pourquoi derrière ce qu'il imagine |
+| `specs` — a déjà un cahier des charges | Va directement au dépôt de document, et l'entretien cherche ce que le document tait |
 
 Elle est ouverte à tous, et chaque cadrage ouvre un entretien que le modèle
 facture. Deux bornes, dans `server/src/routes/inscription.ts` :

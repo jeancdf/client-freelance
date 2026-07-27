@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS cadrage (
   courriel      TEXT NOT NULL DEFAULT '',
   ip_empreinte  TEXT NOT NULL DEFAULT '',
   commence_le   TEXT,
+  maturite      TEXT NOT NULL DEFAULT '',
   cree_le       TEXT NOT NULL,
   maj_le        TEXT NOT NULL,
   valide_le     TEXT
@@ -85,6 +86,8 @@ const AJOUTS: Array<{ table: string; colonne: string; definition: string }> = [
   // Posé quand le client est déjà entré dans l'entretien : en revenant sur son
   // lien il reprend la question, il ne relit pas la page d'accueil.
   { table: 'cadrage', colonne: 'commence_le', definition: 'TEXT' },
+  // Où en était le client : le modèle en a besoin pour doser ses questions.
+  { table: 'cadrage', colonne: 'maturite', definition: "TEXT NOT NULL DEFAULT ''" },
 ];
 
 function migrer(db: DatabaseSync): void {

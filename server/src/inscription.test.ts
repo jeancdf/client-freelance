@@ -19,6 +19,7 @@ const VALIDE = {
   courriel: 'camille@atelier-dorval.fr',
   metier: 'Menuisier agenceur, six salariés',
   demande: "Je perds des chantiers parce que les clients ne voient jamais mon travail.",
+  maturite: 'idee',
 };
 
 /** Une adresse par test : la limite se compte par empreinte d'adresse. */
@@ -77,6 +78,25 @@ describe('ouverture en libre-service', () => {
     const reponse = await depuis('203.0.113.12', { ...VALIDE, demande: 'un site' });
     assert.equal(reponse.statusCode, 400);
     assert.match((reponse.json() as { erreur: string }).erreur, /un peu plus/);
+  });
+
+  it('refuse un point de départ absent ou inventé', async () => {
+    const sans = await depuis('203.0.113.14', { ...VALIDE, maturite: undefined });
+    assert.equal(sans.statusCode, 400);
+    assert.match((sans.json() as { erreur: string }).erreur, /où vous en êtes/);
+
+    const faux = await depuis('203.0.113.15', { ...VALIDE, maturite: 'expert' });
+    assert.equal(faux.statusCode, 400);
+  });
+
+  it('garde le point de départ, qui décide du ton des questions', async () => {
+    const corps = (await depuis('203.0.113.16', { ...VALIDE, maturite: 'specs' })).json() as {
+      id: string;
+    };
+    const ligne = db.prepare('SELECT maturite FROM cadrage WHERE id = ?').get(corps.id) as {
+      maturite: string;
+    };
+    assert.equal(ligne.maturite, 'specs');
   });
 
   it('refuse une adresse qui n’en est pas une', async () => {

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { POINTS } from '../../shared/points.ts';
 import type {
   CreationCadrage,
+  Maturite,
   Fichier,
   LigneCadrage,
   Mode,
@@ -40,6 +41,7 @@ interface LigneBase {
   maj_le: string;
   valide_le: string | null;
   commence_le: string | null;
+  maturite: string;
 }
 
 interface LigneReponse {
@@ -158,6 +160,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     lien1: ligne.lien1,
     lien2: ligne.lien2,
     statut: ligne.statut as Statut,
+    maturite: ligne.maturite as Maturite | '',
     reponses,
     fichiers: fichiersDe(db, ligne.id).map(versFichier),
     creeLe: ligne.cree_le,
@@ -178,6 +181,8 @@ export interface Provenance {
   ipEmpreinte: string;
   /** Le client est entré dans l'entretien dès l'ouverture, sans page d'accueil. */
   dejaEntre?: boolean;
+  /** Où il en est : le modèle s'en sert pour doser ses questions. */
+  maturite?: Maturite;
 }
 
 export function creer(db: Base, entree: CreationCadrage, provenance?: Provenance): LigneBase {
@@ -189,8 +194,8 @@ export function creer(db: Base, entree: CreationCadrage, provenance?: Provenance
   const now = maintenant();
 
   db.prepare(
-    `INSERT INTO cadrage (id, token, client_nom, client_metier, demande, courriel, ip_empreinte, commence_le, cree_le, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO cadrage (id, token, client_nom, client_metier, demande, courriel, ip_empreinte, commence_le, maturite, cree_le, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     token,
@@ -200,6 +205,7 @@ export function creer(db: Base, entree: CreationCadrage, provenance?: Provenance
     provenance?.courriel ?? '',
     provenance?.ipEmpreinte ?? '',
     provenance?.dejaEntre ? now : null,
+    provenance?.maturite ?? '',
     now,
     now,
   );
@@ -375,6 +381,7 @@ export function lister(db: Base): { stats: StatsCadrages; cadrages: LigneCadrage
       couverture: repondus.size,
       enCours: ligne.statut === 'valide' ? null : enCours,
       tensionOuverte: tensionOuverte(reponses),
+      maturite: ligne.maturite as Maturite | '',
       dureeMs: ligne.duree_ms,
       majLe: ligne.maj_le,
       valideLe: ligne.valide_le,

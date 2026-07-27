@@ -636,16 +636,60 @@ textarea.landing__input {
   text-align: center;
 }
 
-/* Le dépôt de document : même formulaire, autre destination. */
-.landing__depot {
-  display: block;
-  width: 100%;
-  margin: 14px 0 0;
-  padding: 8px 0;
-  min-height: 40px;
-  font-size: 14px;
-  text-align: center;
+/* Le point de départ : trois blocs cliquables, pas trois puces perdues. */
+.landing__depart {
+  border: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.landing__depart-legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.landing__depart-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: 2px;
+  padding: 11px 12px;
   cursor: pointer;
+}
+
+.landing__depart-option:hover {
+  border-color: var(--ink-45);
+}
+
+.landing__depart-option--choisi {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.landing__depart-radio {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.landing__depart-texte {
+  display: grid;
+  gap: 2px;
+}
+
+.landing__depart-titre {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+
+.landing__depart-corps {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-70);
 }
 
 /* -------------------------------------------------------------- reprise -- */

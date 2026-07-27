@@ -31,6 +31,7 @@ interface LigneCadrage {
   client_metier: string;
   demande: string;
   brief: string;
+  maturite: string;
 }
 
 export function contexteDe(db: Base, ligne: LigneCadrage): Contexte {
@@ -47,6 +48,7 @@ export function contexteDe(db: Base, ligne: LigneCadrage): Contexte {
     demande: ligne.demande,
     reponses,
     brief: ligne.brief,
+    maturite: ligne.maturite as Contexte['maturite'],
   };
 }
 
