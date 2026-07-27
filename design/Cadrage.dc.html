@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F7F4ED;--paper-2:#FFFDF8;--ink:#1B1A17;--ink-70:#4C483F;--ink-45:#78736A;
+  --rule:#D8D2C4;--rule-soft:#E6E1D6;--accent:#2B4A78;--on-accent:#FFFDF8;--accent-soft:#E8ECF3;--tint:#F0EADA;
+  --pad:20px;--rail:none;--railcol:minmax(0,1fr);--mob:block;--qsize:29px;--h1:33px;--twocol:minmax(0,1fr);--recapcol:minmax(0,1fr);--lead:19px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#131311;--paper-2:#1A1A17;--ink:#EEEAE0;--ink-70:#B6B0A3;--ink-45:#8C8779;
+    --rule:#34322C;--rule-soft:#26251F;--accent:#A3C0E6;--on-accent:#12130F;--accent-soft:#1D242E;--tint:#1F1E19;
+  }
+}
+[data-theme="dark"]{
+  --paper:#131311;--paper-2:#1A1A17;--ink:#EEEAE0;--ink-70:#B6B0A3;--ink-45:#8C8779;
+  --rule:#34322C;--rule-soft:#26251F;--accent:#A3C0E6;--on-accent:#12130F;--accent-soft:#1D242E;--tint:#1F1E19;
+}
+@media (min-width:900px){
+  :root{--pad:52px;--rail:block;--railcol:216px minmax(0,1fr);--mob:none;--qsize:42px;--h1:52px;--twocol:1.4fr .85fr;--recapcol:168px minmax(0,1fr);--lead:20px;}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",sans-serif;font-size:16px;line-height:1.55;text-wrap:pretty;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid currentColor}
+a:hover{color:var(--ink)}
+button{font-family:inherit}
+textarea,input{font-family:inherit;color:inherit}
+::selection{background:var(--accent);color:var(--on-accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+[data-nav][aria-current="page"]{background:var(--ink);color:var(--paper)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--paper);padding-bottom:96px">
+
+<sc-if value="{{ isAccueil }}" hint-placeholder-val="{{ true }}">
+<main style="max-width:1120px;margin:0 auto;padding:0 var(--pad)">
+  <header style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:26px 0 0">
+    <span style="font-family:Spectral,serif;font-size:18px;letter-spacing:.01em">Studio Bassot</span>
+    <button onClick="{{ toggleTheme }}" style="min-height:44px;padding:0 12px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Thème</button>
+  </header>
+
+  <div style="display:grid;grid-template-columns:var(--twocol);gap:64px;align-items:start;padding:clamp(48px,11vh,120px) 0 0">
+    <div style="max-width:660px;animation:rise .5s ease-out both">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 26px">Entretien de cadrage · Camille Dorval</p>
+      <h1 style="font-family:Spectral,serif;font-weight:400;font-size:var(--h1);line-height:1.12;letter-spacing:-.015em;margin:0 0 26px">Avant notre rendez-vous,<br>prenons quinze minutes pour comprendre votre projet.</h1>
+      <p style="font-size:var(--lead);line-height:1.62;color:var(--ink-70);margin:0 0 18px;max-width:52ch">Vous répondez à une question à la fois, avec vos mots — ou en choisissant parmi les réponses que je vous propose. Il n'y a rien à préparer, et « je ne sais pas » est une réponse utile.</p>
+      <p style="font-size:var(--lead);line-height:1.62;color:var(--ink-70);margin:0 0 34px;max-width:52ch">À la fin, vous relisez ce qui a été noté et vous le validez. C'est ce document qui me servira à chiffrer votre projet.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+        <button onClick="{{ startLong }}" style="display:inline-flex;align-items:center;min-height:52px;padding:0 26px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:16px;font-weight:500;letter-spacing:.01em;cursor:pointer">Commencer l'entretien</button>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;color:var(--ink-45)">15 min environ · aucun compte à créer</span>
+      </div>
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;color:var(--ink-45);margin:18px 0 0">Vous pouvez vous arrêter à tout moment et reprendre depuis n'importe quel appareil.</p>
+    </div>
+
+    <aside style="border-top:1px solid var(--ink);padding-top:22px;max-width:420px;animation:rise .5s .08s ease-out both">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 16px">Si vous êtes déjà prêt</p>
+      <div style="display:grid;gap:22px">
+        <div>
+          <h2 style="font-family:Spectral,serif;font-weight:400;font-size:22px;line-height:1.25;margin:0 0 8px">Version courte — cinq minutes</h2>
+          <p style="font-size:15.5px;line-height:1.6;color:var(--ink-70);margin:0 0 14px">Les mêmes huit points, mais je vais droit au but : une question par point, des réponses déjà rédigées à choisir ou à corriger, aucune relance.</p>
+          <button onClick="{{ startCourt }}" style="display:inline-flex;align-items:center;min-height:46px;padding:0 18px;background:transparent;color:var(--ink);border:1px solid var(--ink-45);border-radius:2px;font-size:15px;cursor:pointer" style-hover="border-color:var(--ink)">Passer en version courte</button>
+        </div>
+        <div style="border-top:1px solid var(--rule-soft);padding-top:20px">
+          <h2 style="font-family:Spectral,serif;font-weight:400;font-size:22px;line-height:1.25;margin:0 0 8px">J'ai déjà un cahier des charges</h2>
+          <p style="font-size:15.5px;line-height:1.6;color:var(--ink-70);margin:0 0 14px">Déposez le document et vos liens. Je le lis, puis je ne vous demande que ce qui manque — quatre minutes.</p>
+          <button onClick="{{ goRapide }}" style="display:inline-flex;align-items:center;min-height:46px;padding:0 18px;background:transparent;color:var(--ink);border:1px solid var(--ink-45);border-radius:2px;font-size:15px;cursor:pointer" style-hover="border-color:var(--ink)">Déposer mon document</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer style="margin-top:clamp(56px,12vh,120px);padding:20px 0 0;border-top:1px solid var(--rule-soft);display:flex;flex-wrap:wrap;gap:8px 24px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45)">
+    <span>Nicolas Bassot — développement sur mesure</span>
+    <span>nicolas@studiobassot.fr</span>
+  </footer>
+</main>
+</sc-if>
+
+<sc-if value="{{ isReprise }}" hint-placeholder-val="{{ true }}">
+<main style="max-width:1120px;margin:0 auto;padding:0 var(--pad)">
+  <header style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:26px 0 0">
+    <span style="font-family:Spectral,serif;font-size:18px;letter-spacing:.01em">Studio Bassot</span>
+    <button onClick="{{ toggleTheme }}" style="min-height:44px;padding:0 12px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Thème</button>
+  </header>
+  <div style="max-width:640px;padding:clamp(56px,14vh,140px) 0 0;animation:rise .5s ease-out both">
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 24px">Reprise · interrompu hier à 21 h 48</p>
+    <h1 style="font-family:Spectral,serif;font-weight:400;font-size:var(--h1);line-height:1.14;letter-spacing:-.015em;margin:0 0 22px">Bonsoir Camille. Tout ce que vous avez écrit est là.</h1>
+    <p style="font-size:var(--lead);line-height:1.62;color:var(--ink-70);margin:0 0 30px;max-width:50ch">Nous nous étions arrêtés au troisième point, le fonctionnement actuel. Deux points sont déjà notés, il en reste six.</p>
+    <div style="border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:16px 0;margin:0 0 30px">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 10px">Dernière chose écrite — vos mots</p>
+      <p style="font-family:Spectral,serif;font-size:18px;line-height:1.5;color:var(--ink-70);margin:0">« Mes clients, une quarantaine, entre 30 et 55 ans. Ils ne sont pas très à l'aise avec les applications, il faut que ce soit évident. »</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+      <button onClick="{{ resumeAt3 }}" style="display:inline-flex;align-items:center;min-height:52px;padding:0 26px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:16px;font-weight:500;cursor:pointer">Reprendre au troisième point</button>
+      <button onClick="{{ goRecap }}" style="display:inline-flex;align-items:center;min-height:48px;padding:0 16px;background:none;border:none;border-bottom:1px solid var(--ink-45);color:var(--ink);font-size:15px;cursor:pointer">Relire ce qui est déjà noté</button>
+    </div>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isEntretien }}" hint-placeholder-val="{{ true }}">
+<div>
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px var(--pad);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--paper);z-index:5">
+    <div style="display:flex;align-items:baseline;gap:12px;min-width:0">
+      <span style="font-family:Spectral,serif;font-size:16.5px">Studio Bassot</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ modeLabel }}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:var(--ink-45);display:var(--rail)">Enregistré</span>
+      <button onClick="{{ toggleTheme }}" style="min-height:44px;padding:0 12px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Thème</button>
+    </div>
+  </header>
+
+  <main style="max-width:1120px;margin:0 auto;padding:0 var(--pad);display:grid;grid-template-columns:var(--railcol);gap:0 56px;align-items:start">
+    <nav aria-label="Les huit points du cadrage" style="display:var(--rail);position:sticky;top:76px;padding:44px 0 0">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 16px">Le dossier</p>
+      <ol style="list-style:none;margin:0;padding:0;display:grid;gap:2px">
+        <sc-for list="{{ rail }}" as="p" hint-placeholder-count="8">
+          <li style="display:grid;grid-template-columns:26px 1fr;gap:8px;align-items:center;min-height:36px;padding:4px 0">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;{{ p.numStyle }}">{{ p.num }}</span>
+            <button onClick="{{ p.jump }}" style="text-align:left;background:none;border:none;padding:2px 0;min-height:32px;cursor:pointer;font-size:15px;line-height:1.35;{{ p.labelStyle }}">{{ p.label }}</button>
+          </li>
+        </sc-for>
+      </ol>
+    </nav>
+
+    <section style="padding:26px 0 0;max-width:680px">
+      <div style="display:var(--mob);border-bottom:1px solid var(--rule-soft);padding-bottom:12px;margin-bottom:26px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-45)">{{ mobHeader }}</span>
+        <div style="display:flex;gap:4px;margin-top:8px" aria-hidden="true">
+          <sc-for list="{{ rail }}" as="p" hint-placeholder-count="8">
+            <span style="height:3px;flex:1;{{ p.barStyle }}"></span>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ tension }}" hint-placeholder-val="{{ false }}">
+      <div style="border-left:2px solid var(--accent);background:var(--accent-soft);padding:16px 18px;margin:0 0 30px;animation:rise .35s ease-out both">
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-70);margin:0 0 8px">À éclaircir avant d'avancer</p>
+        <p style="font-size:16.5px;line-height:1.55;margin:0 0 14px;color:var(--ink)">Vous m'avez dit que vos clients ne sont pas à l'aise avec les applications. Là, vous mettez au cœur du projet la saisie des charges à chaque série, par eux. Les deux peuvent tenir, mais il faut savoir ce qui compte le plus — ça change ce qu'on construit.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <button onClick="{{ resolveSimple }}" style="min-height:44px;padding:0 14px;background:var(--paper-2);border:1px solid var(--ink-45);border-radius:2px;color:var(--ink);font-size:14.5px;cursor:pointer">La simplicité passe d'abord</button>
+          <button onClick="{{ resolveSuivi }}" style="min-height:44px;padding:0 14px;background:var(--paper-2);border:1px solid var(--ink-45);border-radius:2px;color:var(--ink);font-size:14.5px;cursor:pointer">Le suivi des charges passe d'abord</button>
+          <button onClick="{{ closeTension }}" style="min-height:44px;padding:0 14px;background:none;border:none;border-bottom:1px solid var(--ink-45);color:var(--ink);font-size:14.5px;cursor:pointer">Les deux, j'explique</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ hasPrev }}" hint-placeholder-val="{{ false }}">
+      <div style="border-left:1px solid var(--rule);padding:0 0 0 16px;margin:0 0 34px">
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 7px">{{ prevLabel }}</p>
+        <p style="font-family:Spectral,serif;font-size:17px;line-height:1.5;color:var(--ink-70);margin:0 0 10px">{{ prevQuote }}</p>
+        <button onClick="{{ toggleDossier }}" style="background:none;border:none;padding:6px 0;min-height:36px;color:var(--accent);font-size:14px;cursor:pointer;border-bottom:1px solid currentColor">{{ dossierLabel }}</button>
+        <sc-if value="{{ dossierOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--rule-soft);display:grid;gap:16px;animation:fade .3s ease-out both">
+          <sc-for list="{{ dossier }}" as="d" hint-placeholder-count="2">
+            <div>
+              <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 7px">{{ d.label }}</p>
+              <p style="font-family:Spectral,serif;font-size:17px;line-height:1.5;color:var(--ink-70);margin:0">{{ d.quote }}</p>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <div style="animation:rise .4s ease-out both">
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 18px;display:var(--rail)">{{ pointHeader }}</p>
+        <h1 style="font-family:Spectral,serif;font-weight:400;font-size:var(--qsize);line-height:1.16;letter-spacing:-.012em;margin:0 0 16px;max-width:26ch">{{ question }}</h1>
+        <sc-if value="{{ showHint }}" hint-placeholder-val="{{ true }}">
+        <p style="font-family:Spectral,serif;font-style:italic;font-size:17px;line-height:1.55;color:var(--ink-45);margin:0 0 26px;max-width:44ch">{{ hint }}</p>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ helpClosed }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="margin:0 0 20px">
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 10px">{{ propsLabel }}</p>
+          <div style="display:grid;gap:6px">
+            <sc-for list="{{ propositions }}" as="p" hint-placeholder-count="3">
+              <button onClick="{{ p.pick }}" style="display:block;width:100%;text-align:left;min-height:48px;padding:11px 14px;background:transparent;border-radius:2px;color:var(--ink);font-size:16px;line-height:1.45;cursor:pointer;{{ p.style }}" style-hover="border-color:var(--ink)">{{ p.text }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--rule);background:var(--paper-2);border-radius:2px">
+          <label for="rep" style="display:block;padding:14px 16px 0;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45)">Votre réponse — modifiable à volonté</label>
+          <textarea id="rep" rows="6" value="{{ draft }}" onChange="{{ setDraft }}" placeholder="Écrivez comme vous le raconteriez de vive voix." style="display:block;width:100%;border:none;background:transparent;padding:10px 16px 14px;font-size:17.5px;line-height:1.6;resize:vertical;outline:none;min-height:132px"></textarea>
+          <div style="display:flex;flex-wrap:wrap-reverse;gap:12px;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--rule-soft)">
+            <button onClick="{{ openHelp }}" style="display:inline-flex;align-items:center;min-height:46px;padding:0 16px;background:transparent;color:var(--ink);border:1px solid var(--ink-45);border-radius:2px;font-size:15px;cursor:pointer">Je ne sais pas, aidez-moi</button>
+            <button onClick="{{ submit }}" style="display:inline-flex;align-items:center;min-height:46px;padding:0 22px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:15.5px;font-weight:500;cursor:pointer">{{ submitLabel }}</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:12px 0 0">
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.05em;color:var(--ink-45);margin:0">Enregistré à chaque mot · fermez cette page, le lien vous ramènera ici</p>
+          <sc-if value="{{ showCourtSwitch }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ switchCourt }}" style="background:none;border:none;padding:6px 0;min-height:36px;color:var(--accent);font-size:14px;cursor:pointer;border-bottom:1px solid currentColor">Aller plus vite : version courte</button>
+          </sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ help }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px solid var(--ink);background:var(--paper-2);border-radius:2px;animation:rise .3s ease-out both">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:15px 18px;border-bottom:1px solid var(--rule)">
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0">{{ helpHeader }}</p>
+          <button onClick="{{ closeHelp }}" style="background:none;border:none;padding:0;min-height:44px;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Fermer</button>
+        </div>
+        <div style="padding:20px 18px 6px">
+          <h2 style="font-family:Spectral,serif;font-weight:400;font-size:25px;line-height:1.25;margin:0 0 8px">{{ helpTitle }}</h2>
+          <p style="font-size:16px;line-height:1.55;color:var(--ink-70);margin:0 0 20px;max-width:50ch">Prenez celle qui ressemble le plus à votre situation : je l'écris pour vous, vous corrigez ensuite. Chaque piste a une conséquence sur le projet, je vous la dis tout de suite.</p>
+        </div>
+        <div style="display:grid;gap:0;border-top:1px solid var(--rule-soft)">
+          <sc-for list="{{ helpItems }}" as="h" hint-placeholder-count="3">
+            <button onClick="{{ h.pick }}" style="display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--rule-soft);padding:16px 18px;cursor:pointer;color:var(--ink)" style-hover="background:var(--tint)">
+              <span style="display:block;font-family:Spectral,serif;font-size:18.5px;line-height:1.45;margin-bottom:6px">{{ h.text }}</span>
+              <span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.05em;color:var(--accent)">{{ h.effect }}</span>
+            </button>
+          </sc-for>
+          <button onClick="{{ closeHelp }}" style="display:block;width:100%;text-align:left;background:none;border:none;padding:16px 18px;cursor:pointer;color:var(--ink)" style-hover="background:var(--tint)">
+            <span style="display:block;font-family:Spectral,serif;font-size:18.5px;line-height:1.45">Aucune de celles-ci — je vous raconte à ma façon.</span>
+          </button>
+        </div>
+      </div>
+      </sc-if>
+    </section>
+  </main>
+</div>
+</sc-if>
+
+<sc-if value="{{ isReform }}" hint-placeholder-val="{{ true }}">
+<main style="min-height:100vh;display:grid;place-items:center;padding:56px var(--pad);animation:fade .3s ease-out both">
+  <div style="max-width:660px;width:100%;animation:rise .45s ease-out both">
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 22px">{{ reformHeader }}</p>
+    <h1 style="font-family:Spectral,serif;font-weight:400;font-size:clamp(24px,4.4vw,30px);line-height:1.2;margin:0 0 18px">Si je comprends bien :</h1>
+    <p style="font-family:Spectral,serif;font-size:clamp(20px,3.6vw,25px);line-height:1.48;margin:0 0 14px;border-left:2px solid var(--accent);padding-left:20px">{{ reformText }}</p>
+    <p style="font-size:16px;line-height:1.55;color:var(--ink-45);margin:0 0 32px;padding-left:22px">C'est ma formulation, pas la vôtre. Si elle est fausse, c'est moi qui corrige.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      <button onClick="{{ confirmReform }}" style="display:inline-flex;align-items:center;min-height:52px;padding:0 26px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:16px;font-weight:500;cursor:pointer">Oui, c'est ça</button>
+      <button onClick="{{ rejectReform }}" style="display:inline-flex;align-items:center;min-height:52px;padding:0 22px;background:transparent;color:var(--ink);border:1px solid var(--ink-45);border-radius:2px;font-size:16px;cursor:pointer">Pas tout à fait</button>
+    </div>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isRapide }}" hint-placeholder-val="{{ true }}">
+<div>
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px var(--pad);border-bottom:1px solid var(--rule)">
+    <div style="display:flex;align-items:baseline;gap:12px;min-width:0">
+      <span style="font-family:Spectral,serif;font-size:16.5px">Studio Bassot</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45)">Dépôt de document</span>
+    </div>
+    <button onClick="{{ toggleTheme }}" style="min-height:44px;padding:0 12px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Thème</button>
+  </header>
+  <main style="max-width:1180px;margin:0 auto;padding:36px var(--pad) 0">
+    <div style="max-width:620px;margin-bottom:34px">
+      <h1 style="font-family:Spectral,serif;font-weight:400;font-size:clamp(28px,4.6vw,38px);line-height:1.16;letter-spacing:-.012em;margin:0 0 14px">Déposez ce que vous avez. Je lis, puis je ne vous demande que ce qui manque.</h1>
+      <p style="font-size:17px;line-height:1.6;color:var(--ink-70);margin:0">Document, notes brutes, capture d'un tableau, liens vers l'existant : tout est utile, même incomplet. Rien de ce que vous écrivez ne sera reformulé sans votre accord.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:var(--twocol);gap:44px;align-items:start">
+      <div>
+        <section style="border:1px solid var(--rule);background:var(--paper-2);border-radius:2px;margin-bottom:22px">
+          <label for="brief" style="display:block;padding:14px 16px 0;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45)">Votre projet, écrit ou collé</label>
+          <textarea id="brief" rows="9" value="{{ brief }}" onChange="{{ setBrief }}" placeholder="Collez votre cahier des charges, ou décrivez le projet en quelques paragraphes." style="display:block;width:100%;border:none;background:transparent;padding:10px 16px 16px;font-size:16.5px;line-height:1.62;resize:vertical;outline:none;min-height:210px"></textarea>
+        </section>
+
+        <section style="margin-bottom:22px">
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 10px">Fichiers</p>
+          <ul style="list-style:none;margin:0 0 12px;padding:0;display:grid;gap:8px">
+            <li style="display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--rule);background:var(--paper-2);padding:12px 14px;border-radius:2px">
+              <span style="display:grid;gap:2px;min-width:0">
+                <span style="font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Cahier_des_charges_App_Coaching_v3.pdf</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">6 pages · 1,2 Mo · déposé</span>
+              </span>
+              <button style="min-height:44px;padding:0 10px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Retirer</button>
+            </li>
+            <li style="display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--rule);background:var(--paper-2);padding:12px 14px;border-radius:2px">
+              <span style="display:grid;gap:2px;min-width:0">
+                <span style="font-size:15.5px">Maquettes_ecrans_seance.png</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">340 Ko · déposé</span>
+              </span>
+              <button style="min-height:44px;padding:0 10px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Retirer</button>
+            </li>
+          </ul>
+          <div style="border:1px dashed var(--rule);padding:22px 16px;text-align:center;border-radius:2px">
+            <p style="font-size:15.5px;color:var(--ink-70);margin:0 0 10px">Glissez vos fichiers ici</p>
+            <button style="min-height:44px;padding:0 16px;background:transparent;border:1px solid var(--ink-45);border-radius:2px;color:var(--ink);font-size:14.5px;cursor:pointer">Parcourir</button>
+            <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45);margin:12px 0 0">PDF, Word, images, tableurs · 25 Mo par fichier</p>
+          </div>
+        </section>
+
+        <section>
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 10px">Liens vers l'existant</p>
+          <div style="display:grid;gap:8px">
+            <input type="url" value="{{ lien1 }}" onChange="{{ setLien1 }}" style="min-height:48px;border:1px solid var(--rule);background:var(--paper-2);border-radius:2px;padding:0 14px;font-size:15.5px;color:var(--ink);outline:none">
+            <input type="url" value="{{ lien2 }}" onChange="{{ setLien2 }}" placeholder="https://" style="min-height:48px;border:1px solid var(--rule);background:var(--paper-2);border-radius:2px;padding:0 14px;font-size:15.5px;color:var(--ink);outline:none">
+          </div>
+        </section>
+      </div>
+
+      <aside style="border-top:2px solid var(--ink);padding-top:20px;position:sticky;top:22px">
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 6px">Lecture de votre document</p>
+        <h2 style="font-family:Spectral,serif;font-weight:400;font-size:22px;line-height:1.3;margin:0 0 18px">Cinq points sur huit sont couverts. Il en manque trois.</h2>
+        <ul style="list-style:none;margin:0 0 20px;padding:0;display:grid;gap:14px">
+          <li>
+            <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 3px">VI — Le hors-périmètre</p>
+            <p style="font-size:15.5px;line-height:1.5;color:var(--ink);margin:0">Ce que le projet ne fera pas n'apparaît nulle part. C'est le point qui fait déraper les budgets.</p>
+          </li>
+          <li>
+            <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 3px">VII — Les contraintes</p>
+            <p style="font-size:15.5px;line-height:1.5;color:var(--ink);margin:0">Une date de mise en ligne est citée page 4, mais rien sur l'hébergement ni sur qui reprend la maintenance.</p>
+          </li>
+          <li>
+            <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 3px">VIII — La définition du succès</p>
+            <p style="font-size:15.5px;line-height:1.5;color:var(--ink);margin:0">À quoi vous saurez, dans six mois, que ça valait le coup.</p>
+          </li>
+        </ul>
+        <details style="border-top:1px solid var(--rule);padding-top:12px;margin-bottom:22px">
+          <summary style="cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-45);min-height:44px;display:flex;align-items:center">Les cinq points déjà couverts</summary>
+          <ul style="list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px;font-size:15px;color:var(--ink-70)">
+            <li>Le problème — p. 1</li>
+            <li>Les utilisateurs — p. 2</li>
+            <li>Le fonctionnement actuel — p. 2</li>
+            <li>L'existant à reprendre — p. 3</li>
+            <li>Le périmètre — p. 3 à 5</li>
+          </ul>
+        </details>
+        <button onClick="{{ completeRapide }}" style="display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:52px;padding:0 20px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:16px;font-weight:500;cursor:pointer">Compléter les trois points</button>
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45);margin:12px 0 0;text-align:center">Quatre minutes environ</p>
+      </aside>
+    </div>
+    <div style="height:56px"></div>
+  </main>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRecap }}" hint-placeholder-val="{{ true }}">
+<div>
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px var(--pad);border-bottom:1px solid var(--rule)">
+    <div style="display:flex;align-items:baseline;gap:12px;min-width:0">
+      <span style="font-family:Spectral,serif;font-size:16.5px">Studio Bassot</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45)">Récapitulatif</span>
+    </div>
+    <button onClick="{{ toggleTheme }}" style="min-height:44px;padding:0 12px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Thème</button>
+  </header>
+  <main style="max-width:900px;margin:0 auto;padding:44px var(--pad) 0">
+    <div style="border-bottom:2px solid var(--ink);padding-bottom:26px;margin-bottom:34px">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 18px">Cadrage — Camille Dorval · 12 mars 2026 · 17 minutes</p>
+      <h1 style="font-family:Spectral,serif;font-weight:400;font-size:clamp(30px,5.4vw,46px);line-height:1.12;letter-spacing:-.015em;margin:0 0 20px;max-width:24ch">Voilà votre projet, tel que je l'ai compris.</h1>
+      <p style="font-size:var(--lead);line-height:1.62;color:var(--ink-70);margin:0;max-width:56ch">Relisez, corrigez ce qui vous semble faux, puis validez. Ce document part chez Nicolas Bassot et sert de base au chiffrage.</p>
+    </div>
+
+    <div style="border:1px solid var(--rule);background:var(--paper-2);padding:18px 20px;margin-bottom:40px;border-radius:2px">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 12px">Trois écritures, pour que rien ne se confonde</p>
+      <div style="display:grid;gap:12px">
+        <p style="margin:0;font-size:15.5px;line-height:1.5;color:var(--ink-70);border-left:2px solid var(--ink);padding-left:12px"><span style="font-family:Spectral,serif;font-size:17px;color:var(--ink)">En romain entre guillemets :</span> vos mots, exactement comme vous les avez écrits. Jamais retouchés.</p>
+        <p style="margin:0;font-size:15.5px;line-height:1.5;color:var(--ink-70);padding-left:14px">En texte courant, avec la mention <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-45)">reformulé · confirmé</span> : ma formulation, que vous avez validée pendant l'entretien.</p>
+        <p style="margin:0;font-size:15.5px;line-height:1.5;color:var(--ink-70);padding-left:14px">Sur fond crème, avec la mention <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-45)">déduit</span> : ce que j'ai supposé sans vous le demander. À vous de dire si c'est juste.</p>
+      </div>
+    </div>
+
+    <sc-for list="{{ recap }}" as="r" hint-placeholder-count="8">
+    <section style="display:grid;grid-template-columns:var(--recapcol);gap:10px 28px;padding-bottom:30px;margin-bottom:30px;border-bottom:1px solid var(--rule-soft)">
+      <h2 style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:4px 0 0">{{ r.label }}</h2>
+      <div style="display:grid;gap:16px">
+        <p style="font-family:Spectral,serif;font-size:20px;line-height:1.5;margin:0;border-left:2px solid var(--ink);padding-left:16px">{{ r.quote }}</p>
+        <sc-if value="{{ r.hasReform }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-45);margin:0 0 5px">Reformulé · confirmé</p>
+          <p style="font-size:16.5px;line-height:1.6;margin:0">{{ r.reform }}</p>
+        </div>
+        </sc-if>
+        <sc-if value="{{ r.hasDeduit }}" hint-placeholder-val="{{ false }}">
+        <div style="background:var(--tint);padding:14px 16px;border-radius:2px">
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-45);margin:0 0 5px">Déduit — vous ne me l'avez pas dit</p>
+          <p style="font-size:16.5px;line-height:1.6;margin:0 0 12px">{{ r.deduit }}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            <button style="min-height:44px;padding:0 14px;background:var(--paper-2);border:1px solid var(--ink-45);border-radius:2px;color:var(--ink);font-size:14.5px;cursor:pointer">C'est juste</button>
+            <button style="min-height:44px;padding:0 14px;background:none;border:none;border-bottom:1px solid var(--ink-45);color:var(--ink);font-size:14.5px;cursor:pointer">Corriger</button>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ r.hasOuvert }}" hint-placeholder-val="{{ false }}">
+        <div style="border:1px dashed var(--rule);padding:14px 16px;border-radius:2px">
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-45);margin:0 0 5px">Resté ouvert — à traiter au rendez-vous</p>
+          <p style="font-size:16.5px;line-height:1.6;margin:0;color:var(--ink-70)">{{ r.ouvert }}</p>
+        </div>
+        </sc-if>
+        <button onClick="{{ r.edit }}" style="justify-self:start;background:none;border:none;padding:4px 0;min-height:36px;color:var(--accent);font-size:14px;cursor:pointer;border-bottom:1px solid currentColor">Modifier ce point</button>
+      </div>
+    </section>
+    </sc-for>
+
+    <div style="display:grid;gap:18px;max-width:620px;padding:4px 0 60px">
+      <p style="font-size:17px;line-height:1.6;color:var(--ink-70);margin:0">Un point vous semble faux ? Corrigez-le avant de valider : vos corrections l'emportent toujours sur ma formulation.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+        <button onClick="{{ goFin }}" style="display:inline-flex;align-items:center;min-height:54px;padding:0 28px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:16.5px;font-weight:500;cursor:pointer">Valider et envoyer à Nicolas Bassot</button>
+      </div>
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45);margin:0">Vous recevrez une copie de ce document par courriel · modifiable jusqu'au rendez-vous</p>
+    </div>
+  </main>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFin }}" hint-placeholder-val="{{ true }}">
+<main style="min-height:100vh;display:grid;place-items:center;padding:56px var(--pad)">
+  <div style="max-width:600px;animation:rise .5s ease-out both">
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 24px">Cadrage transmis · 12 mars, 21 h 06</p>
+    <h1 style="font-family:Spectral,serif;font-weight:400;font-size:clamp(30px,5.4vw,44px);line-height:1.14;letter-spacing:-.015em;margin:0 0 20px">C'est noté. Nicolas a votre dossier.</h1>
+    <p style="font-size:var(--lead);line-height:1.62;color:var(--ink-70);margin:0 0 14px">Il le lit avant votre rendez-vous de jeudi et arrivera avec un chiffrage et ses questions restantes — celles du budget, notamment.</p>
+    <p style="font-size:var(--lead);line-height:1.62;color:var(--ink-70);margin:0 0 32px">Vous avez reçu une copie par courriel. Le lien reste ouvert : vous pouvez compléter ou corriger jusqu'au rendez-vous.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      <button onClick="{{ goRecap }}" style="display:inline-flex;align-items:center;min-height:50px;padding:0 20px;background:transparent;color:var(--ink);border:1px solid var(--ink-45);border-radius:2px;font-size:15.5px;cursor:pointer">Relire mon dossier</button>
+    </div>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+<div style="font-size:14px">
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--rule);background:var(--paper-2)">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0;flex-wrap:wrap">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase">Studio Bassot / cadrages</span>
+      <nav style="display:flex;gap:2px">
+        <button aria-current="page" style="min-height:34px;padding:0 10px;background:var(--ink);color:var(--paper);border:none;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;cursor:pointer;white-space:nowrap">TOUS 12</button>
+        <button style="min-height:34px;padding:0 10px;background:none;color:var(--ink-70);border:none;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;cursor:pointer;white-space:nowrap">EN COURS 4</button>
+        <button style="min-height:34px;padding:0 10px;background:none;color:var(--ink-70);border:none;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;cursor:pointer;white-space:nowrap">À CHIFFRER 3</button>
+        <button style="min-height:34px;padding:0 10px;background:none;color:var(--ink-70);border:none;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;cursor:pointer;white-space:nowrap">DORMANTS 2</button>
+      </nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="search" placeholder="Filtrer…" style="min-height:34px;width:150px;border:1px solid var(--rule);background:var(--paper);border-radius:2px;padding:0 10px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink);outline:none">
+      <button style="min-height:34px;padding:0 12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;cursor:pointer;white-space:nowrap">+ NOUVEAU LIEN</button>
+      <button onClick="{{ toggleTheme }}" style="min-height:34px;padding:0 8px;background:none;border:1px solid var(--rule);border-radius:2px;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;cursor:pointer">THÈME</button>
+    </div>
+  </header>
+
+  <div style="display:flex;flex-wrap:wrap;border-bottom:1px solid var(--rule);background:var(--paper)">
+    <div style="padding:10px 18px;border-right:1px solid var(--rule-soft)"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--ink-45)">TAUX D'ACHÈVEMENT</span><span style="font-family:'IBM Plex Mono',monospace;font-size:16px">73 %</span></div>
+    <div style="padding:10px 18px;border-right:1px solid var(--rule-soft)"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--ink-45)">DURÉE MÉDIANE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:16px">16 min</span></div>
+    <div style="padding:10px 18px;border-right:1px solid var(--rule-soft)"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--ink-45)">CHEMIN RAPIDE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:16px">4 / 12</span></div>
+    <div style="padding:10px 18px"><span style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--ink-45)">TENSIONS OUVERTES</span><span style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--accent)">2</span></div>
+  </div>
+
+  <div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;min-width:960px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--rule)">
+        <th style="text-align:left;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-45)">CLIENT</th>
+        <th style="text-align:left;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-45)">DEMANDE</th>
+        <th style="text-align:left;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-45)">COUVERTURE</th>
+        <th style="text-align:left;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-45)">VOIE</th>
+        <th style="text-align:left;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-45)">STATUT</th>
+        <th style="text-align:left;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--ink-45)">DERNIER SIGNAL</th>
+        <th style="padding:8px 12px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--rule-soft);background:var(--accent-soft)">
+        <td style="padding:11px 12px"><span style="display:block;font-weight:500">Camille Dorval</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">coach sportif · indép.</span></td>
+        <td style="padding:11px 12px;color:var(--ink-70)">Application d'entraînement pour ses clients</td>
+        <td style="padding:11px 12px;white-space:nowrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">3/8</span><span style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle"><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--accent)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span></span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-70)">entretien</td>
+        <td style="padding:11px 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;white-space:nowrap;border:1px solid var(--accent);color:var(--accent);padding:2px 6px">EN COURS · 1 TENSION</span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45);white-space:nowrap">il y a 12 min</td>
+        <td style="padding:11px 12px;text-align:right"><button onClick="{{ goEntretien }}" style="min-height:32px;padding:0 10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);cursor:pointer">SUIVRE</button></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--rule-soft)">
+        <td style="padding:11px 12px"><span style="display:block;font-weight:500">Sofia Renaudin</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">Groupe Verdier · resp. digital</span></td>
+        <td style="padding:11px 12px;color:var(--ink-70)">Portail de commande pour 60 points de vente</td>
+        <td style="padding:11px 12px;white-space:nowrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">8/8</span><span style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle"><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span></span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-70)">rapide · doc 6 p.</td>
+        <td style="padding:11px 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;white-space:nowrap;border:1px solid var(--ink);padding:2px 6px">VALIDÉ · À CHIFFRER</span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45);white-space:nowrap">hier, 18 h 40</td>
+        <td style="padding:11px 12px;text-align:right"><button onClick="{{ goRecap }}" style="min-height:32px;padding:0 10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);cursor:pointer">OUVRIR</button></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--rule-soft)">
+        <td style="padding:11px 12px"><span style="display:block;font-weight:500">Grégory Palun</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">Ateliers Palun · menuiserie</span></td>
+        <td style="padding:11px 12px;color:var(--ink-70)">Suivi des devis et des poses, sur chantier</td>
+        <td style="padding:11px 12px;white-space:nowrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">8/8</span><span style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle"><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span></span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-70)">entretien · 21 min</td>
+        <td style="padding:11px 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;white-space:nowrap;border:1px solid var(--ink);padding:2px 6px">VALIDÉ · À CHIFFRER</span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45);white-space:nowrap">10 mars</td>
+        <td style="padding:11px 12px;text-align:right"><button onClick="{{ goRecap }}" style="min-height:32px;padding:0 10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);cursor:pointer">OUVRIR</button></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--rule-soft)">
+        <td style="padding:11px 12px"><span style="display:block;font-weight:500">Marine Cottet</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">Cottet &amp; associés · notaires</span></td>
+        <td style="padding:11px 12px;color:var(--ink-70)">Collecte de pièces auprès des clients</td>
+        <td style="padding:11px 12px;white-space:nowrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">6/8</span><span style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle"><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--accent)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span></span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-70)">entretien</td>
+        <td style="padding:11px 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;white-space:nowrap;border:1px solid var(--rule);color:var(--ink-70);padding:2px 6px">EN PAUSE · 2 J</span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45);white-space:nowrap">9 mars</td>
+        <td style="padding:11px 12px;text-align:right"><button style="min-height:32px;padding:0 10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);cursor:pointer">RELANCER</button></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--rule-soft)">
+        <td style="padding:11px 12px"><span style="display:block;font-weight:500">Hakim Belaïd</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45)">Belaïd Transports</span></td>
+        <td style="padding:11px 12px;color:var(--ink-70)">Automatisation des feuilles de route</td>
+        <td style="padding:11px 12px;white-space:nowrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">2/8</span><span style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle"><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--ink)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span><span style="width:7px;height:7px;background:var(--rule)"></span></span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-70)">entretien</td>
+        <td style="padding:11px 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;white-space:nowrap;border:1px solid var(--rule);color:var(--ink-45);padding:2px 6px">DORMANT · 11 J</span></td>
+        <td style="padding:11px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-45);white-space:nowrap">1er mars</td>
+        <td style="padding:11px 12px;text-align:right"><button style="min-height:32px;padding:0 10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);cursor:pointer">RELANCER</button></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-45);padding:12px 18px;margin:0">5 lignes sur 12 · tri par dernier signal</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDeroule }}" hint-placeholder-val="{{ true }}">
+<main style="max-width:1120px;margin:0 auto;padding:0 var(--pad)">
+  <header style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:26px 0 0">
+    <span style="font-family:Spectral,serif;font-size:18px;letter-spacing:.01em">Studio Bassot</span>
+    <button onClick="{{ toggleTheme }}" style="min-height:44px;padding:0 12px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Thème</button>
+  </header>
+
+  <div style="max-width:660px;padding:clamp(36px,7vh,72px) 0 8px;animation:rise .45s ease-out both">
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-45);margin:0 0 22px">Déroulé de l'entretien · les huit points</p>
+    <h1 style="font-family:Spectral,serif;font-weight:400;font-size:var(--h1);line-height:1.12;letter-spacing:-.015em;margin:0 0 16px">Ce que le client voit, et ce que la machine en fait.</h1>
+    <p style="font-size:var(--lead);line-height:1.6;color:var(--ink-70);margin:0 0 10px">Chaque point pose une question, propose des réponses probables tirées du métier du client, puis fait quelque chose de la réponse : la reformuler, en déduire une autre, relever une contradiction, ou la laisser ouverte. Rien n'est ajouté que le client n'ait validé.</p>
+    <p style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.05em;color:var(--ink-45);margin:0">Cas suivi : coach sportif, quarante clients, demande initiale « une appli de fitness ».</p>
+  </div>
+
+  <ol style="list-style:none;margin:26px 0 0;padding:0">
+    <sc-for list="{{ deroule }}" as="d" hint-placeholder-count="8">
+      <li style="border-top:1px solid var(--rule);padding:34px 0">
+        <div style="display:grid;grid-template-columns:var(--recapcol);gap:22px;align-items:start">
+          <div>
+            <p style="font-family:Spectral,serif;font-size:30px;line-height:1;color:var(--accent);margin:0 0 8px">{{ d.num }}</p>
+            <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 14px">{{ d.label }}</p>
+            <button onClick="{{ d.open }}" style="min-height:38px;padding:0 10px;background:none;border:1px solid var(--rule);border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer" style-hover="border-color:var(--ink);color:var(--ink)">Ouvrir l'écran</button>
+          </div>
+
+          <div style="max-width:740px">
+            <h2 style="font-family:Spectral,serif;font-weight:400;font-size:25px;line-height:1.22;letter-spacing:-.01em;margin:0 0 10px;max-width:30ch">{{ d.q }}</h2>
+            <p style="font-family:Spectral,serif;font-style:italic;font-size:16.5px;line-height:1.5;color:var(--ink-45);margin:0 0 24px;max-width:46ch">{{ d.hint }}</p>
+
+            <div style="display:grid;grid-template-columns:var(--twocol);gap:30px;align-items:start">
+              <div>
+                <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 10px">Réponses probables affichées</p>
+                <div style="display:grid;gap:5px;margin-bottom:16px">
+                  <sc-for list="{{ d.props }}" as="pr" hint-placeholder-count="3">
+                    <div style="display:flex;gap:10px;align-items:baseline;justify-content:space-between;padding:9px 12px;border-radius:2px;font-size:14.5px;line-height:1.45;{{ pr.style }}">
+                      <span>{{ pr.text }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);white-space:nowrap">{{ pr.mark }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.03em;color:var(--ink-45);margin:0">Champ libre en dessous · {{ d.helpCount }}</p>
+              </div>
+
+              <div>
+                <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-45);margin:0 0 10px">Traitement</p>
+                <div style="display:grid;gap:12px">
+                  <sc-for list="{{ d.traits }}" as="t" hint-placeholder-count="1">
+                    <div style="padding:12px 14px;{{ t.style }}">
+                      <p style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-70);margin:0 0 7px">{{ t.kind }}</p>
+                      <p style="font-family:Spectral,serif;font-size:16px;line-height:1.5;color:var(--ink);margin:0">{{ t.text }}</p>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </li>
+    </sc-for>
+  </ol>
+
+  <div style="border-top:1px solid var(--rule);padding:30px 0 64px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+    <button onClick="{{ startLong }}" style="display:inline-flex;align-items:center;min-height:52px;padding:0 24px;background:var(--accent);color:var(--on-accent);border:none;border-radius:2px;font-size:16px;font-weight:500;cursor:pointer">Jouer l'entretien depuis le début</button>
+    <button onClick="{{ goRecap }}" style="display:inline-flex;align-items:center;min-height:52px;padding:0 20px;background:transparent;color:var(--ink);border:1px solid var(--ink-45);border-radius:2px;font-size:16px;cursor:pointer">Voir le dossier produit</button>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ plan }}" hint-placeholder-val="{{ true }}">
+<nav aria-label="Aperçu des écrans" style="position:fixed;right:14px;bottom:14px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:5px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px">
+  <button onClick="{{ togglePlan }}" aria-expanded="{{ planOpen }}" style="display:inline-flex;align-items:center;min-height:30px;padding:0 9px;background:none;border:none;color:var(--ink-45);font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer">Parcours</button>
+  <sc-if value="{{ planOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;align-items:stretch;gap:2px;border-top:1px solid var(--rule-soft);padding-top:3px;margin-top:2px;max-height:60vh;overflow:auto">
+    <button data-nav="" aria-current="{{ navAccueil }}" onClick="{{ goAccueil }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">1 Accueil</button>
+    <button data-nav="" aria-current="{{ navEntretien }}" onClick="{{ goEntretien }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">2 Entretien · point {{ stepNum }}</button>
+    <button data-nav="" aria-current="{{ navDeroule }}" onClick="{{ goDeroule }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">Déroulé des 8 points</button>
+    <button data-nav="" aria-current="{{ navAide }}" onClick="{{ goAide }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">3 Aide</button>
+    <button data-nav="" aria-current="{{ navReform }}" onClick="{{ goReform }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">4 Reformulation</button>
+    <button data-nav="" aria-current="{{ navRapide }}" onClick="{{ goRapide }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">5 Chemin rapide</button>
+    <button data-nav="" aria-current="{{ navRecap }}" onClick="{{ goRecap }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">6 Récapitulatif</button>
+    <button data-nav="" aria-current="{{ navTension }}" onClick="{{ goTension }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">Tension</button>
+    <button data-nav="" aria-current="{{ navReprise }}" onClick="{{ goReprise }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">Reprise</button>
+    <button data-nav="" aria-current="{{ navFin }}" onClick="{{ goFin }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">Fin</button>
+    <button data-nav="" aria-current="{{ navDash }}" onClick="{{ goDash }}" style="min-height:30px;padding:0 9px;background:none;border:none;border-radius:2px;color:var(--ink-70);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">7 Prestataire</button>
+    <button onClick="{{ replayDemo }}" style="min-height:30px;padding:0 9px;margin-top:3px;background:none;border:none;border-top:1px solid var(--rule-soft);border-radius:2px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-align:left;white-space:nowrap">Rejouer depuis zéro</button>
+  </div>
+  </sc-if>
+</nav>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;clair&quot;,&quot;sombre&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;'auto'|'clair'|'sombre'&quot;,&quot;section&quot;:&quot;Réglages&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#2B4A78&quot;,&quot;#2F5D4E&quot;,&quot;#8A3324&quot;,&quot;#3B3B6B&quot;],&quot;default&quot;:&quot;#2B4A78&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Réglages&quot;},&quot;afficherPlan&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Réglages&quot;}}">
+const POINTS = [
+  {
+    num: 'I', label: 'Le problème',
+    q: "Qu'est-ce qui vous a fait vous dire, un jour précis, qu'il fallait faire quelque chose ?",
+    hint: "Racontez le dernier moment où ça vous a coûté cher — en temps, en client, en énervement.",
+    props: [
+      "Mes clients ne savent pas quoi faire quand je ne suis pas là. Je leur envoie des programmes en PDF sur WhatsApp, ils les perdent, et je passe mes dimanches à les refaire un par un.",
+      "J'ai perdu deux clients ce trimestre : ils ne suivaient plus rien entre les séances et ont arrêté.",
+      "Je n'arrive plus à prendre de nouveaux clients, la préparation me prend tout mon temps libre."
+    ],
+    reform: "vous passez environ quatre heures chaque dimanche à réécrire des programmes qui se perdent dans WhatsApp, et c'est ça qui vous empêche de prendre plus de clients.",
+    help: {
+      title: "Chez les coachs que j'accompagne, le déclic vient presque toujours d'une de ces trois choses.",
+      items: [
+        { text: "Le temps de préparation devenu ingérable.", effect: "Conséquence : on cherche d'abord la réutilisation des programmes, pas les fonctions visibles." },
+        { text: "Des clients qui décrochent entre deux séances.", effect: "Conséquence : le cœur du projet devient le suivi et le rappel, côté client." },
+        { text: "L'impression de ne plus savoir où en est chacun.", effect: "Conséquence : il faut une vue d'ensemble côté coach, avant tout le reste." }
+      ]
+    }
+  },
+  {
+    num: 'II', label: 'Les utilisateurs',
+    q: "Qui va se servir de cet outil, concrètement, et à quel moment de sa journée ?",
+    hint: "Vous, vos clients, quelqu'un d'autre ? Dites-moi aussi ceux qui ne s'en serviront pas.",
+    props: [
+      "Mes clients, une quarantaine, entre 30 et 55 ans. Ils ne sont pas très à l'aise avec les applications, il faut que ce soit évident.",
+      "Moi seul pour préparer, et mes clients pour consulter leur séance du jour.",
+      "Moi, mes clients, et à terme deux coachs qui travailleraient avec moi.",
+      "Uniquement moi : mes clients continueraient à recevoir un document."
+    ],
+    reform: "deux rôles seulement pour cette première version : vous qui préparez et suivez, vos clients qui consultent la séance du jour. Personne d'autre n'entre dans l'outil.",
+    help: {
+      title: "Trois façons de découper les utilisateurs, selon ce que vous visez.",
+      items: [
+        { text: "Vous seul, et vos clients simples lecteurs.", effect: "Conséquence : la version la plus rapide à construire, et la plus sûre côté clients." },
+        { text: "Vous, vos clients, et un second coach plus tard.", effect: "Conséquence : il faut prévoir la notion de compte coach dès le début, sans la développer." },
+        { text: "Vos clients autonomes, vous en retrait.", effect: "Conséquence : projet plus lourd — il faut de la pédagogie dans l'outil lui-même." }
+      ]
+    }
+  },
+  {
+    num: 'III', label: 'Le fonctionnement actuel',
+    q: "Racontez-moi comment ça se passe aujourd'hui, du moment où un client vous demande un programme jusqu'à ce qu'il l'ait entre les mains.",
+    hint: "Je cherche le détail concret : qui fait quoi, avec quels outils, et où ça vous coûte du temps.",
+    props: [
+      "Je l'écris à la main dans Word, je l'exporte en PDF, et je l'envoie par WhatsApp. Je ne sais jamais si la séance a été faite : je l'apprends à la séance suivante.",
+      "Je note sur papier pendant la séance, et je ressaisis tout le soir.",
+      "Tout passe par WhatsApp, je n'ai pas de méthode fixe."
+    ],
+    reform: "vous écrivez chaque programme à la main dans Word, vous l'envoyez en PDF par WhatsApp, et vous n'avez aucun moyen de savoir si la séance a été faite — vous le découvrez à la séance suivante.",
+    help: {
+      title: "Chez les coachs que j'accompagne, ça se passe presque toujours d'une de ces trois façons.",
+      items: [
+        { text: "Le client m'écrit, on fait le point au téléphone, puis j'écris son programme dans un document que je lui envoie.", effect: "Conséquence : l'application remplace le document que vous écrivez à la main. C'est le cœur du projet." },
+        { text: "Je vois le client en salle, je note tout sur papier pendant la séance, et je ressaisis le soir.", effect: "Conséquence : il faut une saisie très rapide côté coach, utilisable debout, une main occupée." },
+        { text: "Le client passe par mon site, choisit une formule, et je reçois un courriel avec ses réponses.", effect: "Conséquence : votre site devient une brique du projet, il faudra le brancher à l'application." }
+      ]
+    }
+  },
+  {
+    num: 'IV', label: "L'existant à reprendre",
+    q: "Qu'est-ce qui existe déjà autour de votre activité et qui devra rester, ou être repris ?",
+    hint: "Site, fichiers, logiciel de facturation, vidéos, tableur : même bricolé, ça compte.",
+    props: [
+      "J'ai un site vitrine fait par un cousin, sous WordPress. Et je facture avec Abby.",
+      "Rien, à part mes documents Word et mes vidéos sur YouTube.",
+      "Un tableur Google où je note les mensurations et les charges de chacun."
+    ],
+    deduit: "Le site vitrine reste en place et n'est pas touché. L'application vit à côté, sans lien avec la facturation au lancement.",
+    help: {
+      title: "Ce qui compte comme « existant », même si ça n'en a pas l'air.",
+      items: [
+        { text: "Un site, une page de réservation, une boutique.", effect: "Conséquence : à raccorder ou à laisser strictement de côté — c'est à décider maintenant." },
+        { text: "Un outil de facturation ou de comptabilité.", effect: "Conséquence : souvent hors périmètre en v1, pour tenir le budget." },
+        { text: "Des fichiers et des vidéos déjà produits.", effect: "Conséquence : à reprendre tels quels, c'est du temps gagné, pas du travail en plus." }
+      ]
+    }
+  },
+  {
+    num: 'V', label: 'Le périmètre',
+    q: "Si on ne construisait qu'une seule chose, celle sans laquelle ça ne sert à rien, laquelle ?",
+    hint: "On ajoutera le reste ensuite. Je cherche le cœur, pas la liste complète.",
+    props: [
+      "Créer des programmes réutilisables et les adapter par client sans tout réécrire.",
+      "Que le client voie sa séance du jour sur son téléphone, sans compte à créer.",
+      "Que je sache qui a fait sa séance et qui ne l'a pas faite.",
+      "Que chacun saisisse ses charges à chaque série, pour suivre sa progression."
+    ],
+    tensionOn: 3,
+    reform: "le cœur du projet est la création de programmes réutilisables et adaptables par client ; la consultation de la séance du jour sur téléphone vient juste après, sans création de compte.",
+    help: {
+      title: "Trois cœurs possibles. Ils ne coûtent pas la même chose.",
+      items: [
+        { text: "La fabrication des programmes, côté coach.", effect: "Conséquence : c'est là que se trouve votre gain de temps immédiat." },
+        { text: "La consultation par le client, côté téléphone.", effect: "Conséquence : c'est là que se joue l'adoption, mais le gain de temps arrive plus tard." },
+        { text: "Le suivi de ce qui a été fait.", effect: "Conséquence : suppose que les deux premiers existent déjà — donc une v2." }
+      ]
+    }
+  },
+  {
+    num: 'VI', label: 'Le hors-périmètre',
+    q: "Qu'est-ce que ce projet ne fera pas ? C'est la question qui protège votre budget.",
+    hint: "Ce dont vous ne voulez pas, ou ce qui peut attendre une deuxième version.",
+    props: [
+      "Je ne veux pas de messagerie dans l'application. Je garde WhatsApp pour parler à mes clients, ça marche très bien.",
+      "Pas de paiement en ligne pour l'instant, je facture à côté.",
+      "Pas de statistiques ni de courbes : je veux d'abord voir si mes clients l'ouvrent."
+    ],
+    reform: "hors périmètre pour cette première version : la messagerie, le paiement en ligne, et les statistiques de progression.",
+    help: {
+      title: "Ce que les coachs retirent le plus souvent de la première version.",
+      items: [
+        { text: "La messagerie interne.", effect: "Conséquence : WhatsApp reste le canal. Économie nette, et vos clients ne changent pas d'habitude." },
+        { text: "Le paiement en ligne.", effect: "Conséquence : la facturation reste où elle est. C'est le poste le plus coûteux évité." },
+        { text: "Les courbes et statistiques.", effect: "Conséquence : reportées en v2, une fois qu'on sait si l'outil est ouvert." }
+      ]
+    }
+  },
+  {
+    num: 'VII', label: 'Les contraintes',
+    q: "Qu'est-ce qui est imposé, et sur quoi je n'ai pas la main ?",
+    hint: "Une date, un budget, un outil à garder, une personne à convaincre.",
+    props: [
+      "Il faut que ce soit prêt avant septembre, c'est là que les gens reprennent le sport.",
+      "Il faut que ça marche sur des téléphones anciens, certains clients n'en ont pas de récent.",
+      "Je ne veux pas avoir à gérer un serveur ni des mises à jour moi-même.",
+      "J'ai un budget, mais je préfère vous en parler de vive voix."
+    ],
+    ouvert: "Le budget n'a pas été abordé : vous avez préféré en parler de vive voix. C'est noté comme tel, ce n'est pas un oubli.",
+    help: {
+      title: "Les contraintes qui changent vraiment un chiffrage.",
+      items: [
+        { text: "Une date liée à votre activité.", effect: "Conséquence : elle fixe le périmètre de la v1, pas l'inverse." },
+        { text: "Des téléphones anciens à supporter.", effect: "Conséquence : on écarte certaines technologies dès le départ." },
+        { text: "Aucune envie d'administrer l'outil.", effect: "Conséquence : hébergement et maintenance entrent dans la prestation." }
+      ]
+    }
+  },
+  {
+    num: 'VIII', label: 'La définition du succès',
+    q: "Dans six mois, à quoi verrez-vous que ça valait le coup ?",
+    hint: "Un signe concret, quelque chose que vous pourrez constater sans y réfléchir.",
+    props: [
+      "Si je ne passe plus mes dimanches à refaire des programmes, c'est gagné.",
+      "Si mes clients ouvrent leur séance sans que j'aie à les relancer.",
+      "Si je peux prendre dix clients de plus sans travailler davantage."
+    ],
+    reform: "deux repères mesurables à six mois : la préparation hebdomadaire passe de quatre heures à moins de deux, et huit clients sur dix ouvrent leur séance sans relance de votre part.",
+    help: {
+      title: "Trois façons de savoir que ça a marché.",
+      items: [
+        { text: "Du temps rendu, chaque semaine.", effect: "Conséquence : on mesure les heures de préparation avant et après." },
+        { text: "Des clients qui s'en servent seuls.", effect: "Conséquence : on mesure l'ouverture des séances, sans rien demander à personne." },
+        { text: "Plus de clients à charge égale.", effect: "Conséquence : le succès se juge sur votre carnet, pas sur l'outil." }
+      ]
+    }
+  }
+];
+
+class Component extends DCLogic {
+  state = {
+    screen: 'accueil', step: 2, mode: 'long',
+    answers: {}, confirmed: {},
+    help: false, tension: false, dossierOpen: false, planOpen: false, draft: '',
+    brief: "Nous cherchons un prestataire pour développer un portail de commande à destination de nos 60 points de vente. Le contexte, les volumes et les contraintes techniques sont détaillés dans le document joint (v3, validé en comité le 4 mars).",
+    lien1: 'https://camilledorval.fr', lien2: ''
+  };
+
+  componentDidMount() {
+    const t = this.props.theme || 'auto';
+    if (t === 'clair') document.documentElement.setAttribute('data-theme', 'light');
+    else if (t === 'sombre') document.documentElement.setAttribute('data-theme', 'dark');
+    this.applyAccent();
+  }
+  componentDidUpdate() { this.applyAccent(); }
+  applyAccent() {
+    const a = this.props.accent, root = document.documentElement;
+    if (!a || a.toLowerCase() === '#2b4a78') {
+      root.style.removeProperty('--accent'); root.style.removeProperty('--on-accent'); return;
+    }
+    if (this.isDark()) {
+      root.style.setProperty('--accent', 'color-mix(in oklab, ' + a + ' 42%, #EEEAE0)');
+      root.style.setProperty('--on-accent', '#12130F');
+    } else {
+      root.style.setProperty('--accent', a);
+      root.style.setProperty('--on-accent', '#FFFDF8');
+    }
+  }
+  isDark() {
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr) return attr === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  top() { window.scrollTo(0, 0); }
+  answerOf(i) { return this.state.answers[i] || POINTS[i].props[0]; }
+  demoAnswers(upTo) {
+    const a = {}, c = {};
+    for (let i = 0; i < upTo; i++) { a[i] = POINTS[i].props[0]; if (POINTS[i].reform) c[i] = true; }
+    return { answers: a, confirmed: c };
+  }
+  goStep(i, extra) {
+    this.setState(Object.assign({
+      screen: 'entretien', step: i, help: false, tension: false, dossierOpen: false,
+      draft: this.state.answers[i] || ''
+    }, extra || {}));
+    this.top();
+  }
+  submitStep() {
+    const i = this.state.step, p = POINTS[i];
+    const text = (this.state.draft || '').trim() || p.props[0];
+    const answers = Object.assign({}, this.state.answers); answers[i] = text;
+    if (p.tensionOn !== undefined && text === p.props[p.tensionOn] && !this.state.tension) {
+      this.setState({ answers: answers, tension: true }); this.top(); return;
+    }
+    this.setState({ answers: answers });
+    if (p.reform && this.state.mode === 'long') { this.setState({ screen: 'reform', help: false, tension: false }); this.top(); }
+    else this.advance(i);
+  }
+  advance(i) {
+    if (i >= POINTS.length - 1) { this.setState({ screen: 'recap', help: false, tension: false }); this.top(); }
+    else this.goStep(i + 1);
+  }
+
+  renderVals() {
+    const s = this.state, i = Math.min(s.step, POINTS.length - 1), p = POINTS[i];
+    const cur = (n) => s.screen === n ? 'page' : undefined;
+    const done = (k) => s.answers[k] !== undefined;
+
+    const deroule = POINTS.map((pt, k) => {
+      const ans = s.answers[k] !== undefined ? s.answers[k] : pt.props[0];
+      const traits = [];
+      if (pt.reform) traits.push({
+        kind: 'Reformulation soumise avant d’avancer',
+        text: 'Si je comprends bien : ' + pt.reform,
+        style: 'border-left:2px solid var(--accent);background:var(--accent-soft)'
+      });
+      if (pt.tensionOn !== undefined) traits.push({
+        kind: 'Tension détectée, arbitrage demandé',
+        text: 'Si le client retient « ' + pt.props[pt.tensionOn] + ' », la réponse est confrontée au point II — des clients peu à l’aise avec les applications — et l’entretien s’arrête sur un arbitrage.',
+        style: 'border-left:2px solid var(--ink);background:var(--tint)'
+      });
+      if (pt.deduit) traits.push({
+        kind: 'Déduit sans question supplémentaire',
+        text: pt.deduit,
+        style: 'border-left:1px solid var(--rule)'
+      });
+      if (pt.ouvert) traits.push({
+        kind: 'Laissé ouvert, signalé comme tel',
+        text: pt.ouvert,
+        style: 'border-left:1px solid var(--rule)'
+      });
+      if (!traits.length) traits.push({
+        kind: 'Consigné tel quel',
+        text: 'La réponse part au dossier sans reformulation : elle est déjà factuelle.',
+        style: 'border-left:1px solid var(--rule)'
+      });
+      return {
+        num: pt.num, label: pt.label, q: pt.q, hint: pt.hint, answer: ans, traits: traits,
+        open: () => this.goStep(k),
+        helpTitle: pt.help.title,
+        helpCount: pt.help.items.length + ' pistes chiffrées si le client répond « je ne sais pas »',
+        props: pt.props.map(t => ({
+          text: t,
+          mark: t === ans ? 'Retenue' : '',
+          style: t === ans
+            ? 'border:1px solid var(--ink);background:var(--paper-2);color:var(--ink)'
+            : 'border:1px solid var(--rule-soft);color:var(--ink-45)'
+        }))
+      };
+    });
+
+    const rail = POINTS.map((pt, k) => ({
+      num: pt.num, label: pt.label,
+      numStyle: k === i ? 'color:var(--accent)' : (done(k) ? 'color:var(--ink-45)' : 'color:var(--ink-45)'),
+      labelStyle: k === i
+        ? 'color:var(--ink);font-weight:500;border-bottom:2px solid var(--accent)'
+        : (done(k) ? 'color:var(--ink-70);border-bottom:1px solid var(--rule)' : 'color:var(--ink-45)'),
+      barStyle: k === i ? 'background:var(--accent)' : (done(k) ? 'background:var(--ink-70)' : 'background:var(--rule)'),
+      jump: () => this.goStep(k)
+    }));
+
+    const answeredBefore = [];
+    for (let k = 0; k < i; k++) if (done(k)) answeredBefore.push(k);
+    const last = answeredBefore.length ? answeredBefore[answeredBefore.length - 1] : null;
+
+    const recap = POINTS.map((pt, k) => ({
+      label: pt.num + ' — ' + pt.label,
+      quote: '« ' + this.answerOf(k) + ' »',
+      hasReform: !!pt.reform, reform: pt.reform ? pt.reform.charAt(0).toUpperCase() + pt.reform.slice(1) : '',
+      hasDeduit: !!pt.deduit, deduit: pt.deduit || '',
+      hasOuvert: !!pt.ouvert, ouvert: pt.ouvert || '',
+      edit: () => this.goStep(k)
+    }));
+
+    return {
+      plan: this.props.afficherPlan !== false,
+      planOpen: s.planOpen,
+      togglePlan: () => this.setState(st => ({ planOpen: !st.planOpen })),
+      isAccueil: s.screen === 'accueil', isEntretien: s.screen === 'entretien',
+      isReform: s.screen === 'reform', isRapide: s.screen === 'rapide',
+      isRecap: s.screen === 'recap', isFin: s.screen === 'fin',
+      isReprise: s.screen === 'reprise', isDash: s.screen === 'dash',
+      isDeroule: s.screen === 'deroule', deroule: deroule,
+      help: s.help, helpClosed: !s.help, tension: s.tension, dossierOpen: s.dossierOpen,
+      draft: s.draft, brief: s.brief, lien1: s.lien1, lien2: s.lien2,
+      rail: rail, stepNum: p.num,
+      modeLabel: s.mode === 'court' ? 'Cadrage — Camille Dorval · version courte' : 'Cadrage — Camille Dorval',
+      mobHeader: 'Point ' + p.num + ' · ' + p.label,
+      pointHeader: 'Point ' + p.num + ' — ' + p.label,
+      question: p.q, hint: p.hint, showHint: s.mode !== 'court',
+      propsLabel: p.props.length > 3 ? 'Quatre réponses probables — cliquez, puis corrigez à votre main' : 'Réponses probables — cliquez, puis corrigez à votre main',
+      propositions: p.props.map((t) => ({
+        text: t,
+        style: (s.draft || '').trim() === t ? 'border:1px solid var(--ink);background:var(--paper-2)' : 'border:1px solid var(--rule)',
+        pick: () => this.setState({ draft: t })
+      })),
+      submitLabel: i >= POINTS.length - 1 ? 'Voir le récapitulatif' : 'Continuer',
+      submit: () => this.submitStep(),
+      showCourtSwitch: s.mode === 'long',
+      switchCourt: () => this.setState({ mode: 'court' }),
+      hasPrev: last !== null,
+      prevLabel: last !== null ? POINTS[last].num + ' — ' + POINTS[last].label + ' · vos mots' : '',
+      prevQuote: last !== null ? '« ' + this.answerOf(last) + ' »' : '',
+      dossierLabel: 'Relire le dossier — ' + answeredBefore.length + (answeredBefore.length > 1 ? ' points écrits' : ' point écrit'),
+      dossier: answeredBefore.map(k => ({ label: POINTS[k].num + ' — ' + POINTS[k].label + ' · vos mots', quote: '« ' + this.answerOf(k) + ' »' })),
+      toggleDossier: () => this.setState(st => ({ dossierOpen: !st.dossierOpen })),
+      openHelp: () => { this.setState({ help: true }); this.top(); },
+      closeHelp: () => this.setState({ help: false }),
+      helpHeader: 'Annexe — aide sur le point ' + p.num,
+      helpTitle: p.help.title,
+      helpItems: p.help.items.map(h => ({ text: h.text, effect: h.effect, pick: () => this.setState({ help: false, draft: h.text }) })),
+      resolveSimple: () => { const a = Object.assign({}, s.answers); a[i] = POINTS[i].props[1]; this.setState({ answers: a, draft: POINTS[i].props[1], tension: false }); },
+      resolveSuivi: () => this.setState({ tension: false }),
+      closeTension: () => this.setState({ tension: false }),
+      reformHeader: 'Point ' + p.num + ' — je vérifie avant de passer au suivant',
+      reformText: (p.reform || '').charAt(0).toUpperCase() + (p.reform || '').slice(1),
+      confirmReform: () => { const c = Object.assign({}, s.confirmed); c[i] = true; this.setState({ confirmed: c }); this.advance(i); },
+      rejectReform: () => this.goStep(i),
+      recap: recap,
+      startLong: () => this.setState(Object.assign({ screen: 'entretien', mode: 'long', step: 0, draft: '', help: false, tension: false, answers: {}, confirmed: {} })) || this.top(),
+      startCourt: () => this.setState({ screen: 'entretien', mode: 'court', step: 0, draft: '', help: false, tension: false, answers: {}, confirmed: {} }) || this.top(),
+      replayDemo: () => this.setState({ screen: 'accueil', mode: 'long', step: 0, draft: '', answers: {}, confirmed: {}, help: false, tension: false }) || this.top(),
+      resumeAt3: () => { const d = this.demoAnswers(2); this.setState({ screen: 'entretien', step: 2, draft: '', answers: d.answers, confirmed: d.confirmed, help: false, tension: false }); this.top(); },
+      completeRapide: () => { const d = this.demoAnswers(5); this.setState({ screen: 'entretien', mode: 'court', step: 5, draft: '', answers: d.answers, confirmed: d.confirmed, help: false, tension: false }); this.top(); },
+      goAccueil: () => { this.setState({ screen: 'accueil', help: false, tension: false }); this.top(); },
+      goEntretien: () => this.goStep(s.screen === 'entretien' ? i : i),
+      goAide: () => this.goStep(i, { help: true }),
+      goTension: () => this.goStep(4, { tension: true, draft: POINTS[4].props[3] }),
+      goReform: () => { this.setState({ screen: 'reform', help: false, tension: false }); this.top(); },
+      goRapide: () => { this.setState({ screen: 'rapide', help: false, tension: false }); this.top(); },
+      goRecap: () => { const d = this.demoAnswers(POINTS.length); const answers = Object.assign(d.answers, s.answers); this.setState({ screen: 'recap', answers: answers, help: false, tension: false }); this.top(); },
+      goFin: () => { this.setState({ screen: 'fin', help: false, tension: false }); this.top(); },
+      goReprise: () => { this.setState({ screen: 'reprise', help: false, tension: false }); this.top(); },
+      goDash: () => { this.setState({ screen: 'dash', help: false, tension: false }); this.top(); },
+      goDeroule: () => { const d = this.demoAnswers(POINTS.length); const answers = Object.assign(d.answers, s.answers); this.setState({ screen: 'deroule', answers: answers, help: false, tension: false }); this.top(); },
+      navDeroule: cur('deroule'),
+      navAccueil: cur('accueil'),
+      navEntretien: s.screen === 'entretien' && !s.help && !s.tension ? 'page' : undefined,
+      navAide: s.screen === 'entretien' && s.help ? 'page' : undefined,
+      navTension: s.screen === 'entretien' && s.tension ? 'page' : undefined,
+      navReform: cur('reform'), navRapide: cur('rapide'), navRecap: cur('recap'),
+      navFin: cur('fin'), navReprise: cur('reprise'), navDash: cur('dash'),
+      toggleTheme: () => { document.documentElement.setAttribute('data-theme', this.isDark() ? 'light' : 'dark'); this.forceUpdate(); },
+      setDraft: (e) => this.setState({ draft: e.target.value }),
+      setBrief: (e) => this.setState({ brief: e.target.value }),
+      setLien1: (e) => this.setState({ lien1: e.target.value }),
+      setLien2: (e) => this.setState({ lien2: e.target.value })
+    };
+  }
+}
+</script>
+</body>
+</html>
