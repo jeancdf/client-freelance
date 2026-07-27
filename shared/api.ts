@@ -116,6 +116,71 @@ export interface CreationCadrage {
   demande?: string;
 }
 
+// --------------------------------------------------- contenu généré ------ //
+
+/** D'où vient le contenu affiché : utile en développement, jamais montré au client. */
+export type Origine = 'cache' | 'modele' | 'repli';
+
+export interface Piste {
+  texte: string;
+  /** La conséquence sur le projet, dite tout de suite. */
+  effet: string;
+}
+
+export interface Aide {
+  titre: string;
+  pistes: Piste[];
+}
+
+/** Une contradiction relevée entre deux réponses, et l'arbitrage proposé. */
+export interface Tension {
+  explication: string;
+  optionA: string;
+  optionB: string;
+}
+
+export interface Propositions {
+  propositions: string[];
+  origine: Origine;
+}
+
+export interface AideGeneree extends Aide {
+  origine: Origine;
+}
+
+/** Ce que le serveur rend après l'écriture d'une réponse. */
+export interface SuiteReponse {
+  reponse: Reponse;
+  /** `null` si le point n'appelle pas de reformulation. */
+  reformulation: string | null;
+  /** `null` s'il n'y a pas de contradiction. */
+  tension: Tension | null;
+  /** Ce qui a été déduit sans le demander, s'il y a lieu. */
+  deduction: string | null;
+}
+
+export interface PointAnalyse {
+  index: number;
+  couvert: boolean;
+  /** Recopié du document, jamais reformulé. */
+  extrait: string;
+  /** Le point rédigé comme une réponse du client, à partir du document seul. */
+  reponse: string;
+  /** Ce qui manque, quand le point n'est pas couvert. */
+  manque: string;
+}
+
+export interface Analyse {
+  points: PointAnalyse[];
+  couverts: number;
+}
+
+export interface AnalyseGeneree extends Analyse {
+  origine: Origine;
+  /** Vrai si des fichiers n'ont pas pu être lus (PDF, Word). */
+  fichiersIllisibles: string[];
+}
+
 export interface CadrageCree {
   id: string;
   token: string;

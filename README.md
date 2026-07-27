@@ -31,17 +31,23 @@ compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre.
 | Fin | `src/screens/Fin.tsx` | Accusé de transmission |
 | Reprise | `src/screens/Reprise.tsx` | Retour après interruption |
 | Déroulé | `src/screens/Deroule.tsx` | Coulisses : ce que la machine fait de chaque réponse |
-| Prestataire | `src/screens/Dashboard.tsx` | Les cadrages en cours, côté Studio Bassot |
+| Prestataire | `src/screens/Dashboard.tsx` | Les cadrages en cours, côté Studio Cazals |
 
 ## Où se trouve quoi
 
-- `src/data/points.ts` — les huit points : questions, relances, réponses
+- `shared/points.ts` — les huit points : questions, relances, réponses
   probables, reformulations, pistes d'aide. C'est le script de l'entretien ;
-  le modifier change ce que le client lit.
+  le modifier change ce que le client lit. Partagé avec le serveur, qui s'en
+  sert pour repérer les contradictions.
+- `shared/api.ts` — le contrat entre navigateur et serveur, défini une fois.
 - `src/state.ts` — la machine à états : navigation, brouillon, arbitrage,
   validation des reformulations.
+- `src/usePersistance.ts` — l'enregistrement au fil de l'eau : n'envoie que ce
+  qui a changé, après un demi-seconde de silence.
 - `src/styles.css` — les jetons de la maquette et toutes les règles d'écran.
 - `src/App.tsx` — le montage, le thème et la couleur d'accent.
+- `server/src/` — Fastify, SQLite (`node:sqlite`, sans dépendance native),
+  routes client et prestataire, plus les tests.
 
 `<Cadrage>` accepte trois réglages : `theme` (`auto` | `clair` | `sombre`),
 `accent` (couleur de marque, éclaircie automatiquement en thème sombre) et

@@ -1,5 +1,5 @@
 import { POINTS } from '../shared/points';
-import type { Client, Fichier, Mode, Session, Statut, Voie } from '../shared/api';
+import type { Aide, Client, Fichier, Mode, Session, Statut, Tension, Voie } from '../shared/api';
 
 export type { Mode, Voie };
 
@@ -54,6 +54,20 @@ export interface State {
   lien1: string;
   lien2: string;
   session: SessionMeta | null;
+
+  /** Réponses probables générées pour ce client, par point. */
+  propositions: Record<number, string[]>;
+  /** Pistes d'aide générées, par point. */
+  aide: Record<number, Aide>;
+  /** Ce qui a été déduit de chaque réponse, pour le récapitulatif. */
+  deductions: Record<number, string>;
+  /** La reformulation à faire valider, quand on est sur l'écran dédié. */
+  reformulation: string | null;
+  /** La contradiction relevée sur le point en cours, s'il y en a une. */
+  tensionCourante: Tension | null;
+  /** Vrai pendant que le modèle travaille : les boutons attendent. */
+  occupe: boolean;
+
   /** Incrémenté à chaque transition qui doit ramener en haut de page. */
   scrollTick: number;
 }
@@ -77,11 +91,28 @@ export const initialState: State = {
   lien1: 'https://camilledorval.fr',
   lien2: '',
   session: null,
+  propositions: {},
+  aide: {},
+  deductions: {},
+  reformulation: null,
+  tensionCourante: null,
+  occupe: false,
   scrollTick: 0,
 };
 
 export type Action =
   | { type: 'hydrate'; token: string; session: Session }
+  | { type: 'propositions'; point: number; propositions: string[] }
+  | { type: 'aide'; point: number; aide: Aide }
+  | { type: 'occupe'; valeur: boolean }
+  | {
+      type: 'suite';
+      point: number;
+      texte: string;
+      reformulation: string | null;
+      tension: Tension | null;
+      deduction: string | null;
+    }
   | { type: 'fichiers'; fichiers: Fichier[] }
   | { type: 'dossierValide'; valideLe: string; dureeMs: number }
   | { type: 'start'; mode: Mode }
@@ -157,6 +188,9 @@ function goStep(state: State, step: number, extra: Partial<State> = {}): State {
     step,
     help: false,
     tension: false,
+    tensionCourante: null,
+    reformulation: null,
+    occupe: false,
     dossierOpen: false,
     draft: state.answers[step] ?? '',
     scrollTick: state.scrollTick + 1,
@@ -243,6 +277,47 @@ export function reducer(state: State, action: Action): State {
       };
     }
 
+    case 'propositions':
+      return { ...state, propositions: { ...state.propositions, [action.point]: action.propositions } };
+
+    case 'aide':
+      return { ...state, aide: { ...state.aide, [action.point]: action.aide } };
+
+    case 'occupe':
+      return { ...state, occupe: action.valeur };
+
+    /**
+     * Ce que le serveur a tiré de la réponse. C'est lui qui décide de la
+     * suite : arbitrage d'abord s'il y a contradiction, sinon reformulation
+     * à valider, sinon on avance.
+     */
+    case 'suite': {
+      const point = action.point;
+      const base: State = {
+        ...state,
+        answers: { ...state.answers, [point]: action.texte },
+        deductions: action.deduction
+          ? { ...state.deductions, [point]: action.deduction }
+          : state.deductions,
+        occupe: false,
+      };
+
+      if (action.tension && !state.tensionResolved[point]) {
+        return {
+          ...base,
+          tension: true,
+          tensionCourante: action.tension,
+          scrollTick: base.scrollTick + 1,
+        };
+      }
+
+      if (action.reformulation && state.mode === 'long') {
+        return goScreen({ ...base, reformulation: action.reformulation }, 'reform');
+      }
+
+      return advance(base, point);
+    }
+
     case 'fichiers':
       if (!state.session) return state;
       return { ...state, session: { ...state.session, fichiers: action.fichiers } };
@@ -294,6 +369,10 @@ export function reducer(state: State, action: Action): State {
       return goStep(state, 4, { tension: true, draft: POINTS[4].props[3] });
 
     case 'submit': {
+      // Avec un dossier réel, la suite dépend du modèle : le composant lance
+      // l'appel et le réducteur attend l'action « suite ».
+      if (state.session) return { ...state, occupe: true };
+
       const point = POINTS[i];
       const text = state.draft.trim() || point.props[0];
       const answers = { ...state.answers, [i]: text };

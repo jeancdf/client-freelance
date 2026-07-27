@@ -171,7 +171,7 @@ export function Dashboard() {
     <div className="dash">
       <header className="dash__head">
         <div className="dash__head-left">
-          <span className="dash__brand">Studio Bassot / cadrages</span>
+          <span className="dash__brand">Studio Cazals / cadrages</span>
           <nav className="dash__tabs">
             {onglets.map((item) => (
               <button
@@ -316,7 +316,7 @@ function FormulaireJeton({
   return (
     <main className="etat-simple">
       <div className="etat-simple__bloc">
-        <p className="lbl etat-simple__kicker">Studio Bassot / cadrages</p>
+        <p className="lbl etat-simple__kicker">Studio Cazals / cadrages</p>
         <h1 className="serif etat-simple__titre">Votre jeton d'administration.</h1>
         <p className="etat-simple__texte">
           Il se trouve dans <code>server/data/admin-token.txt</code>, ou dans la variable

@@ -1,10 +1,19 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, unlink } from 'node:fs/promises';
+import { mkdir, readFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
-import type { PatchSession, PutReponse } from '../../../shared/api.ts';
+import { POINTS } from '../../../shared/points.ts';
+import type {
+  AideGeneree,
+  AnalyseGeneree,
+  PatchSession,
+  Propositions,
+  PutReponse,
+  SuiteReponse,
+} from '../../../shared/api.ts';
+import * as generation from '../generation.ts';
 import { config, dossierFichiers } from '../config.ts';
 import type { Base } from '../db.ts';
 import {
@@ -13,14 +22,26 @@ import {
   appliquerPatch,
   ecrireReponse,
   fichierParId,
+  fichiersDe,
   parToken,
   session,
   supprimerFichier,
   validerDossier,
 } from '../repo.ts';
 
+/** Ce qu'on sait lire tel quel. Le reste est signalé au client, pas ignoré. */
+const LISIBLES = /^text\/|^application\/(json|xml)/;
+
 interface ParamsToken {
   token: string;
+}
+
+function exigerPoint(brut: string): number {
+  const point = Number(brut);
+  if (!Number.isInteger(point) || point < 0 || point >= POINTS.length) {
+    throw new ErreurRequete(404, 'point inconnu');
+  }
+  return point;
 }
 
 /**
@@ -45,13 +66,91 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     return { majLe: ligne.maj_le, dureeMs: ligne.duree_ms };
   });
 
+  /**
+   * Écrit la réponse, puis rend ce que le modèle en tire : la reformulation à
+   * faire valider, la contradiction éventuelle, la déduction. Les trois sont
+   * demandées en parallèle — c'est le client qui attend devant son écran.
+   */
   app.put<{ Params: ParamsToken & { point: string }; Body: PutReponse }>(
     '/api/cadrage/:token/reponse/:point',
-    async (req) => {
+    async (req): Promise<SuiteReponse> => {
       const ligne = charger(req.params.token);
-      return ecrireReponse(db, ligne, Number(req.params.point), req.body);
+      const point = Number(req.params.point);
+      const reponse = ecrireReponse(db, ligne, point, req.body);
+
+      // Relu après écriture : le contexte doit inclure la réponse qu'on vient
+      // de recevoir, sinon la tension ne peut pas la confronter aux autres.
+      const apres = parToken(db, req.params.token)!;
+
+      const [reformulation, tension, deduction] = await Promise.all([
+        generation.reformulation(db, apres, point, reponse.texte),
+        generation.tension(db, apres, point, reponse.texte),
+        generation.deduction(db, apres, point, reponse.texte),
+      ]);
+
+      return {
+        reponse,
+        reformulation: reformulation.valeur,
+        tension: tension.valeur,
+        deduction: deduction.valeur,
+      };
     },
   );
+
+  /** Les réponses probables, ajustées au métier et à ce qui est déjà écrit. */
+  app.get<{ Params: ParamsToken & { point: string } }>(
+    '/api/cadrage/:token/point/:point/propositions',
+    async (req): Promise<Propositions> => {
+      const ligne = charger(req.params.token);
+      const point = exigerPoint(req.params.point);
+      const { valeur, origine } = await generation.propositions(db, ligne, point);
+      return { propositions: valeur, origine };
+    },
+  );
+
+  /** Les trois pistes de « Je ne sais pas, aidez-moi ». */
+  app.get<{ Params: ParamsToken & { point: string } }>(
+    '/api/cadrage/:token/point/:point/aide',
+    async (req): Promise<AideGeneree> => {
+      const ligne = charger(req.params.token);
+      const point = exigerPoint(req.params.point);
+      const { valeur, origine } = await generation.aide(db, ligne, point);
+      return { ...valeur, origine };
+    },
+  );
+
+  /**
+   * Lit le document déposé et dit lesquels des huit points il couvre.
+   * Les fichiers texte sont joints au brief ; les binaires (PDF, Word) sont
+   * signalés au client plutôt que passés sous silence.
+   */
+  app.post<{ Params: ParamsToken }>('/api/cadrage/:token/analyse', async (req): Promise<AnalyseGeneree> => {
+    const ligne = charger(req.params.token);
+
+    const morceaux: string[] = [];
+    if (ligne.brief.trim()) morceaux.push(ligne.brief.trim());
+
+    const illisibles: string[] = [];
+    for (const fichier of fichiersDe(db, ligne.id)) {
+      if (LISIBLES.test(fichier.type_mime) || /\.(txt|md|csv|json)$/i.test(fichier.nom)) {
+        try {
+          const contenu = await readFile(fichier.chemin, 'utf8');
+          morceaux.push(`--- ${fichier.nom} ---\n${contenu.slice(0, 40_000)}`);
+        } catch {
+          illisibles.push(fichier.nom);
+        }
+      } else {
+        illisibles.push(fichier.nom);
+      }
+    }
+
+    if (!morceaux.length) {
+      throw new ErreurRequete(400, 'Rien à lire : déposez un document ou décrivez le projet.');
+    }
+
+    const { valeur, origine } = await generation.analyse(db, ligne, morceaux.join('\n\n'));
+    return { ...valeur, origine, fichiersIllisibles: illisibles };
+  });
 
   // Le dossier reste modifiable après validation : l'écran de fin le promet
   // explicitement (« le lien reste ouvert jusqu'au rendez-vous »).

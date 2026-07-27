@@ -78,8 +78,8 @@ export function Accueil() {
       </div>
 
       <footer className="accueil__footer">
-        <span>Nicolas Bassot — développement sur mesure</span>
-        <span>nicolas@studiobassot.fr</span>
+        <span>Nicolas Cazals — développement sur mesure</span>
+        <span>nicolas@studiocazals.fr</span>
       </footer>
     </main>
   );

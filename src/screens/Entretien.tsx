@@ -6,7 +6,7 @@ import { answerOf, currentIndex } from '../state';
 const LAST = POINTS.length - 1;
 
 export function Entretien() {
-  const { state, dispatch } = useCadrage();
+  const { state, dispatch, entretien } = useCadrage();
   const index = currentIndex(state);
   const point = POINTS[index];
 
@@ -18,6 +18,15 @@ export function Entretien() {
   const last = answeredBefore.length ? answeredBefore[answeredBefore.length - 1] : null;
 
   const draft = state.draft.trim();
+
+  // Le contenu généré pour CE client quand il est arrivé, celui de la maquette
+  // sinon : l'entretien ne s'arrête jamais faute de modèle.
+  const propositions = state.propositions[index] ?? point.props;
+  const aide = state.aide[index] ?? {
+    titre: point.help.title,
+    pistes: point.help.items.map((h) => ({ texte: h.text, effet: h.effect })),
+  };
+  const enAttenteDesPropositions = Boolean(state.session) && !state.propositions[index];
 
   return (
     <div>
@@ -82,30 +91,28 @@ export function Entretien() {
             <div className="tension">
               <p className="lbl tension__label">À éclaircir avant d'avancer</p>
               <p className="tension__text">
-                Vous m'avez dit que vos clients ne sont pas à l'aise avec les applications. Là, vous
-                mettez au cœur du projet la saisie des charges à chaque série, par eux. Les deux
-                peuvent tenir, mais il faut savoir ce qui compte le plus — ça change ce qu'on
-                construit.
+                {state.tensionCourante?.explication ??
+                  "Vous m'avez dit que vos clients ne sont pas à l'aise avec les applications. Là, vous mettez au cœur du projet la saisie des charges à chaque série, par eux. Les deux peuvent tenir, mais il faut savoir ce qui compte le plus — ça change ce qu'on construit."}
               </p>
               <div className="tension__actions">
                 <button
                   type="button"
                   className="btn btn--soft tension__btn"
-                  onClick={() => dispatch({ type: 'tensionSimple' })}
+                  onClick={() => void entretien.trancher('bascule')}
                 >
-                  La simplicité passe d'abord
+                  {state.tensionCourante?.optionA ?? "La simplicité passe d'abord"}
                 </button>
                 <button
                   type="button"
                   className="btn btn--soft tension__btn"
-                  onClick={() => dispatch({ type: 'tensionKeep' })}
+                  onClick={() => void entretien.trancher('maintien')}
                 >
-                  Le suivi des charges passe d'abord
+                  {state.tensionCourante?.optionB ?? 'Le suivi des charges passe d\'abord'}
                 </button>
                 <button
                   type="button"
                   className="btn btn--underline tension__btn"
-                  onClick={() => dispatch({ type: 'tensionKeep' })}
+                  onClick={() => void entretien.trancher('maintien')}
                 >
                   Les deux, j'explique
                 </button>
@@ -155,12 +162,15 @@ export function Entretien() {
             <div>
               <div className="props">
                 <p className="lbl props__label">
-                  {point.props.length > 3
+                  {propositions.length > 3
                     ? 'Quatre réponses probables — cliquez, puis corrigez à votre main'
                     : 'Réponses probables — cliquez, puis corrigez à votre main'}
                 </p>
                 <div className="props__list">
-                  {point.props.map((text) => (
+                  {enAttenteDesPropositions && (
+                    <p className="props__attente">Je prépare des réponses adaptées à votre métier…</p>
+                  )}
+                  {propositions.map((text) => (
                     <button
                       key={text}
                       type="button"
@@ -196,9 +206,14 @@ export function Entretien() {
                   <button
                     type="button"
                     className="btn btn--primary answer__submit"
-                    onClick={() => dispatch({ type: 'submit' })}
+                    onClick={() => void entretien.soumettre()}
+                    disabled={state.occupe}
                   >
-                    {index >= LAST ? 'Voir le récapitulatif' : 'Continuer'}
+                    {state.occupe
+                      ? 'Je vous lis…'
+                      : index >= LAST
+                        ? 'Voir le récapitulatif'
+                        : 'Continuer'}
                   </button>
                 </div>
               </div>
@@ -236,7 +251,7 @@ export function Entretien() {
               </div>
 
               <div className="help__intro">
-                <h2 className="serif help__title">{point.help.title}</h2>
+                <h2 className="serif help__title">{aide.titre}</h2>
                 <p className="help__body">
                   Prenez celle qui ressemble le plus à votre situation : je l'écris pour vous, vous
                   corrigez ensuite. Chaque piste a une conséquence sur le projet, je vous la dis
@@ -245,15 +260,15 @@ export function Entretien() {
               </div>
 
               <div className="help__list">
-                {point.help.items.map((item) => (
+                {aide.pistes.map((piste) => (
                   <button
-                    key={item.text}
+                    key={piste.texte}
                     type="button"
                     className="help__item help__item--divided"
-                    onClick={() => dispatch({ type: 'pickHelp', text: item.text })}
+                    onClick={() => dispatch({ type: 'pickHelp', text: piste.texte })}
                   >
-                    <span className="help__item-text">{item.text}</span>
-                    <span className="help__item-effect">{item.effect}</span>
+                    <span className="help__item-text">{piste.texte}</span>
+                    <span className="help__item-effect">{piste.effet}</span>
                   </button>
                 ))}
                 <button

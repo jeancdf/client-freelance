@@ -40,6 +40,20 @@ CREATE TABLE IF NOT EXISTS reponse (
   PRIMARY KEY (cadrage_id, point)
 );
 
+-- Ce que le modèle a produit pour ce cadrage. Mis en cache pour deux raisons :
+-- le client qui recharge sa page doit revoir exactement les mêmes propositions,
+-- et chaque génération se paie. La colonne cle porte l'empreinte de l'entrée :
+-- quand le client réécrit sa réponse, la reformulation se régénère d'elle-même.
+CREATE TABLE IF NOT EXISTS generation (
+  cadrage_id TEXT NOT NULL REFERENCES cadrage(id) ON DELETE CASCADE,
+  point      INTEGER NOT NULL,
+  genre      TEXT NOT NULL,
+  cle        TEXT NOT NULL,
+  contenu    TEXT NOT NULL,
+  cree_le    TEXT NOT NULL,
+  PRIMARY KEY (cadrage_id, point, genre)
+);
+
 CREATE TABLE IF NOT EXISTS fichier (
   id         TEXT PRIMARY KEY,
   cadrage_id TEXT NOT NULL REFERENCES cadrage(id) ON DELETE CASCADE,

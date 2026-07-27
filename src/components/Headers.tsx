@@ -13,7 +13,7 @@ export function ThemeButton({ className = 'btn-theme' }: { className?: string })
 export function SiteHeader() {
   return (
     <header className="site-head">
-      <span className="brand">Studio Bassot</span>
+      <span className="brand">Studio Cazals</span>
       <ThemeButton />
     </header>
   );
@@ -63,7 +63,7 @@ export function AppHeader({ mode, sticky, truncate, saved }: AppHeaderProps) {
   return (
     <header className={sticky ? 'app-head app-head--sticky' : 'app-head'}>
       <div className="app-head__left">
-        <span className="app-head__brand">Studio Bassot</span>
+        <span className="app-head__brand">Studio Cazals</span>
         <span
           className={
             truncate

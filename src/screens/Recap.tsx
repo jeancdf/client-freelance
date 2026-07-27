@@ -44,7 +44,7 @@ export function Recap() {
           <h1 className="serif recap__title">Voilà votre projet, tel que je l'ai compris.</h1>
           <p className="recap__lead">
             Relisez, corrigez ce qui vous semble faux, puis validez. Ce document part chez Nicolas
-            Bassot et sert de base au chiffrage.
+            Cazals et sert de base au chiffrage.
           </p>
         </div>
 
@@ -147,7 +147,7 @@ export function Recap() {
               onClick={() => void valider()}
               disabled={envoi === 'envoi'}
             >
-              {envoi === 'envoi' ? 'Envoi en cours…' : 'Valider et envoyer à Nicolas Bassot'}
+              {envoi === 'envoi' ? 'Envoi en cours…' : 'Valider et envoyer à Nicolas Cazals'}
             </button>
           </div>
           {envoi === 'erreur' && (

@@ -12,6 +12,7 @@ import * as api from './lib/api';
 import { jetonDuLien } from './lib/lien';
 import { initialState, reducer, type Screen } from './state';
 import { usePersistance } from './usePersistance';
+import { useEntretien } from './useEntretien';
 import { PlanNav } from './components/PlanNav';
 import { Accueil } from './screens/Accueil';
 import { Reprise } from './screens/Reprise';
@@ -97,6 +98,7 @@ export function Cadrage({ theme = 'auto', accent, afficherPlan = true }: Cadrage
   }, [token]);
 
   const enregistrement = usePersistance(state);
+  const entretien = useEntretien(state, dispatch);
 
   // Chaque changement d'écran ou de point ramène en haut : on lit une page à
   // la fois, jamais le milieu de la suivante.
@@ -111,8 +113,8 @@ export function Cadrage({ theme = 'auto', accent, afficherPlan = true }: Cadrage
   }, []);
 
   const value = useMemo(
-    () => ({ state, dispatch, onToggleTheme, enregistrement }),
-    [state, onToggleTheme, enregistrement],
+    () => ({ state, dispatch, onToggleTheme, enregistrement, entretien }),
+    [state, onToggleTheme, enregistrement, entretien],
   );
 
   if (chargement === 'chargement') return <Attente />;
@@ -149,7 +151,7 @@ function LienInvalide() {
         <h1 className="serif etat-simple__titre">Ce lien ne correspond à aucun cadrage.</h1>
         <p className="etat-simple__texte">
           Il a peut-être été remplacé depuis. Écrivez à{' '}
-          <a href="mailto:nicolas@studiobassot.fr">nicolas@studiobassot.fr</a> et vous en recevrez
+          <a href="mailto:nicolas@studiocazals.fr">nicolas@studiocazals.fr</a> et vous en recevrez
           un nouveau.
         </p>
       </main>
