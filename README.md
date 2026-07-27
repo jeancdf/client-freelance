@@ -48,16 +48,83 @@ compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre.
 `afficherPlan` — à passer à `false` en production, le sélecteur d'écrans étant
 un outil de démonstration.
 
+## Déploiement
+
+En production : <https://client-contact.duckdns.org>
+
+Une seule image (`Dockerfile`) : Fastify sert l'API **et** le build Vite. Le TLS
+et le routage sont assurés par le Caddy mutualisé du VPS — cette stack ne publie
+aucun port sur l'hôte, elle rejoint le réseau du proxy sous l'alias
+`client-contact-web`.
+
+```bash
+# En local, si Docker est disponible
+CADRAGE_ADMIN_TOKEN=... docker compose -f docker-compose.prod.yml up --build
+```
+
+### Pipeline
+
+| Workflow | Déclencheur | Rôle |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | toute branche, PR | types, tests serveur, build front, build de l'image |
+| `.github/workflows/deploy-vps.yml` | `main`, manuel | rejoue les vérifications, puis déploie |
+
+Le déploiement suit le motif des autres projets du VPS : rsync vers
+`~/client-freelance/releases/<sha>`, bascule du symlink `current`,
+`docker compose up -d --build`, purge au-delà de cinq releases, puis contrôle
+que `/api/sante` répond.
+
+**Secrets GitHub à définir** (Settings → Secrets → Actions) :
+
+| Secret | Valeur |
+| --- | --- |
+| `VPS_HOST` | `51.210.109.16` |
+| `VPS_USER` | `deploy` |
+| `VPS_SSH_PRIVATE_KEY` | contenu de `~/.ssh/id_ed25519_ovh_deploy` |
+
+### Sur le VPS
+
+- `~/client-freelance/shared/.env` contient `CADRAGE_ADMIN_TOKEN`. Il n'est
+  jamais dans le dépôt et est copié dans chaque release avant le démarrage.
+- La base SQLite et les fichiers déposés vivent dans le volume
+  `client-freelance_data`, monté sur `/data` : ils survivent aux déploiements.
+- La route HTTPS est déclarée dans `~/qr-compose.prod.yml` (stack `qr-code`) :
+
+  ```
+  client-contact.duckdns.org {
+    reverse_proxy client-contact-web:8787
+  }
+  ```
+
+  Ce fichier est partagé avec huit autres sites. Après l'avoir modifié,
+  préférer un rechargement à chaud — Caddy valide la configuration avant de
+  l'appliquer et conserve l'ancienne en cas d'erreur — plutôt que de recréer le
+  conteneur :
+
+  ```bash
+  docker exec qr_caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+  ```
+
+### Tableau de bord du prestataire
+
+Accessible via le sélecteur « Parcours » hors session, ou directement en mode
+démonstration. Il demande le jeton d'administration au premier accès et le garde
+dans le `localStorage` — jamais dans une URL.
+
 ## Reste à faire
 
-- **Persistance.** L'interface promet « Enregistré à chaque mot » et une reprise
-  depuis n'importe quel appareil ; rien n'est encore stocké. L'écran de reprise
-  affiche un contenu figé.
-- **Envoi du dossier.** « Valider et envoyer » ne fait qu'avancer d'un écran.
-- **Dépôt de fichiers.** La liste de fichiers et la zone de glisser-déposer sont
-  inertes.
-- **Côté prestataire.** Le tableau des cadrages est statique ; les onglets, le
-  filtre et « Nouveau lien » n'agissent pas.
+- **Courriel.** Le récapitulatif promet « vous recevrez une copie par
+  courriel » : rien n'est envoyé. La validation enregistre le dossier, elle ne
+  notifie personne — ni le client, ni Nicolas.
+- **« C'est juste ».** Sur les blocs *déduit*, ce bouton n'enregistre pas
+  l'accord du client (« Corriger » renvoie bien au point). Il faudrait un champ
+  par déduction, comme `confirme` pour les reformulations.
+- **Sauvegarde.** Le volume `client-freelance_data` n'est ni sauvegardé ni
+  répliqué. Une perte du VPS emporte les cadrages en cours.
+- **Rétention.** Aucun lien n'expire ; les fichiers déposés restent
+  indéfiniment.
+- **Écran « Déroulé ».** Il illustre le mécanisme avec les réponses probables
+  et n'est pas branché sur un dossier réel — c'est une vue de démonstration.
 
 ## Maquette d'origine
 

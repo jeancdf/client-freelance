@@ -1,7 +1,7 @@
 import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
 import { POINTS } from '../../shared/points';
-import { answerOf, pointsEcrits, type State } from '../state';
+import { answerOf, pointDeReprise, pointsEcrits, type State } from '../state';
 import { depuis } from '../lib/dates';
 
 const RANGS = [
@@ -15,6 +15,9 @@ const RANGS = [
   'huitième',
 ];
 
+/** Les nombres s'écrivent en toutes lettres : c'est la voix de la maquette. */
+const NOMBRES = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit'];
+
 /** « Bonjour » ou « Bonsoir » : on écrit à l'heure où le client lit. */
 function salutation(maintenant = new Date()): string {
   const h = maintenant.getHours();
@@ -23,6 +26,10 @@ function salutation(maintenant = new Date()): string {
 
 function prenom(nomComplet: string): string {
   return nomComplet.trim().split(/\s+/)[0] ?? nomComplet;
+}
+
+function capitaliser(mot: string): string {
+  return mot.charAt(0).toUpperCase() + mot.slice(1);
 }
 
 /** Le texte figé de la maquette, quand on tourne sans dossier réel. */
@@ -41,14 +48,14 @@ function contenu(state: State): typeof DEMO {
 
   const ecrits = pointsEcrits(state);
   const reste = POINTS.length - ecrits.length;
-  // Le premier point encore vide : c'est là qu'on reprend.
-  const reprise = POINTS.findIndex((_, k) => state.answers[k] === undefined);
-  const index = reprise === -1 ? POINTS.length - 1 : reprise;
+  const index = pointDeReprise(state);
   const dernier = ecrits.length ? ecrits[ecrits.length - 1] : null;
 
   const notes =
-    ecrits.length === 1 ? 'Un point est déjà noté' : `${ecrits.length} points sont déjà notés`;
-  const restant = reste === 1 ? 'il en reste un' : `il en reste ${reste}`;
+    ecrits.length === 1
+      ? 'Un point est déjà noté'
+      : `${capitaliser(NOMBRES[ecrits.length])} points sont déjà notés`;
+  const restant = `il en reste ${NOMBRES[reste]}`;
 
   return {
     kicker: `Reprise · interrompu ${depuis(session.majLe)}`,

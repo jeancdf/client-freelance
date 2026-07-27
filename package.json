@@ -11,7 +11,11 @@
     "start": "CADRAGE_SERVE_DIST=1 node server/src/index.ts",
     "seed": "node server/src/seed.ts",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "test": "node --test server/src/repo.test.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.0",

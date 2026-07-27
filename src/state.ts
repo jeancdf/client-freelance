@@ -127,6 +127,16 @@ export function pointsEcrits(state: State): number[] {
 }
 
 /**
+ * Le premier point encore vide : celui sur lequel on reprend l'entretien.
+ * L'écran de reprise annonce ce point et le bouton doit y mener — d'où un
+ * seul calcul, partagé.
+ */
+export function pointDeReprise(state: State): number {
+  const manquant = POINTS.findIndex((_, k) => state.answers[k] === undefined);
+  return manquant === -1 ? LAST : manquant;
+}
+
+/**
  * Pré-remplit les `upTo` premiers points avec la réponse la plus probable.
  * Sert aux écrans de démonstration, qui doivent montrer un dossier déjà entamé.
  */
@@ -376,7 +386,7 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'resumeAt3': {
-      if (state.session) return goStep(state, currentIndex(state));
+      if (state.session) return goStep(state, pointDeReprise(state));
       const demo = demoAnswers(2);
       return goScreen(state, 'entretien', {
         step: 2,
@@ -387,13 +397,9 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'completeRapide': {
+      // On ne redemande pas ce qui est déjà écrit.
       if (state.session) {
-        // Le premier point encore vide : on ne redemande pas ce qui est écrit.
-        const manquant = POINTS.findIndex((_, k) => state.answers[k] === undefined);
-        return goScreen(state, 'entretien', {
-          step: manquant === -1 ? LAST : manquant,
-          draft: '',
-        });
+        return goScreen(state, 'entretien', { step: pointDeReprise(state), draft: '' });
       }
 
       const demo = demoAnswers(5);

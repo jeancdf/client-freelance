@@ -1,0 +1,60 @@
+# Stack de production. Un seul service : Fastify sert l'API et le front.
+#
+# Le TLS et le routage sont assurés par le Caddy mutualisé du VPS (stack
+# `qr-code`). Ce conteneur ne publie aucun port sur l'hôte : il rejoint le
+# réseau du proxy sous l'alias `client-contact-web`, que le Caddyfile cible.
+
+# Nom explicite : la stack est lancée depuis le symlink `current`, dont Compose
+# tirerait sinon le nom de projet « current » — partagé avec tous les autres
+# projets déployés de la même façon sur ce VPS.
+name: client-freelance
+
+services:
+  web:
+    build:
+      context: .
+    image: client-freelance-web
+    container_name: client-contact-web
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      CADRAGE_SERVE_DIST: '1'
+      CADRAGE_DATA: /data
+      # Sert à fabriquer les liens envoyés aux clients depuis le tableau de bord.
+      CADRAGE_BASE_URL: https://client-contact.duckdns.org
+      # Obligatoire : sans lui le serveur en génère un sur le volume, et le
+      # tableau de bord deviendrait inaccessible au prochain déploiement.
+      CADRAGE_ADMIN_TOKEN: ${CADRAGE_ADMIN_TOKEN:?CADRAGE_ADMIN_TOKEN manquant — voir shared/.env}
+      HOST: 0.0.0.0
+      PORT: '8787'
+
+    volumes:
+      # La base SQLite et les fichiers déposés survivent aux déploiements.
+      - data:/data
+
+    expose:
+      - '8787'
+
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8787/api/sante']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    networks:
+      proxy:
+        aliases:
+          - client-contact-web
+
+volumes:
+  data:
+    name: client-freelance_data
+
+networks:
+  # Réseau du proxy Caddy central, créé par la stack `qr-code`. Il doit exister
+  # avant le premier démarrage.
+  proxy:
+    external: true
+    name: qr-code_app_net
