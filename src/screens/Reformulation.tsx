@@ -21,7 +21,7 @@ export function Reformulation() {
           Point {point.num} — je vérifie avant de passer au suivant
         </p>
         <h1 className="serif reform__title">Si je comprends bien :</h1>
-        <p className="reform__text">{capitalise(point.reform ?? '')}</p>
+        <p className="reform__text">{capitalise(state.reformulation ?? point.reform ?? '')}</p>
         <p className="reform__caveat">
           C'est ma formulation, pas la vôtre. Si elle est fausse, c'est moi qui corrige.
         </p>

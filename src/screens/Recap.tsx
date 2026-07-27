@@ -75,6 +75,10 @@ export function Recap() {
           const repondu = state.answers[k] !== undefined;
           const afficher = repondu || !session;
           const reformule = session ? repondu && Boolean(state.confirmed[k]) : Boolean(point.reform);
+          // Ce que le modèle a écrit sur SA réponse, sinon les textes de la
+          // maquette. Le dossier livré ne peut pas citer un autre client.
+          const deduit = session ? state.deductions[k] : point.deduit;
+          const reformulation = session ? state.reformulations[k] : point.reform;
 
           return (
             <section key={point.num} className="recap__section">
@@ -90,17 +94,17 @@ export function Recap() {
                   </p>
                 )}
 
-                {reformule && point.reform && (
+                {reformule && reformulation && (
                   <div>
                     <p className="lbl recap__sub-label">Reformulé · confirmé</p>
-                    <p className="recap__reform">{capitalise(point.reform)}</p>
+                    <p className="recap__reform">{capitalise(reformulation)}</p>
                   </div>
                 )}
 
-                {afficher && point.deduit && (
+                {afficher && deduit && (
                   <div className="recap__deduit">
                     <p className="lbl recap__sub-label">Déduit — vous ne me l'avez pas dit</p>
-                    <p className="recap__deduit-text">{point.deduit}</p>
+                    <p className="recap__deduit-text">{deduit}</p>
                     <div className="recap__deduit-actions">
                       <button type="button" className="btn btn--soft recap__deduit-btn">
                         C'est juste

@@ -114,6 +114,27 @@ function versFichier(ligne: LigneFichier): Fichier {
   };
 }
 
+/**
+ * Les textes déjà produits par le modèle pour ce cadrage, par point. Le contenu
+ * est stocké en JSON ; une valeur nulle veut dire « rien à dire sur ce point ».
+ */
+function generations(db: Base, cadrageId: string, genre: string): Record<string, string> {
+  const lignes = db
+    .prepare('SELECT point, contenu FROM generation WHERE cadrage_id = ? AND genre = ?')
+    .all(cadrageId, genre) as unknown as Array<{ point: number; contenu: string }>;
+
+  const par: Record<string, string> = {};
+  for (const ligne of lignes) {
+    try {
+      const valeur = JSON.parse(ligne.contenu) as unknown;
+      if (typeof valeur === 'string' && valeur.trim()) par[String(ligne.point)] = valeur;
+    } catch {
+      // Contenu illisible : on l'ignore plutôt que de casser la session.
+    }
+  }
+  return par;
+}
+
 /** Assemble l'état complet envoyé au navigateur à l'ouverture du lien. */
 export function session(db: Base, ligne: LigneBase): Session {
   const reponses: Record<string, Reponse> = {};
@@ -142,6 +163,8 @@ export function session(db: Base, ligne: LigneBase): Session {
     majLe: ligne.maj_le,
     valideLe: ligne.valide_le,
     dureeMs: ligne.duree_ms,
+    reformulations: generations(db, ligne.id, 'reformulation'),
+    deductions: generations(db, ligne.id, 'deduction'),
   };
 }
 

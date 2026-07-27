@@ -53,6 +53,13 @@ export interface Session {
   valideLe: string | null;
   /** Temps passé sur l'entretien, pauses longues exclues. */
   dureeMs: number;
+  /**
+   * Ce que le modèle a produit et qui doit survivre au rechargement : le
+   * récapitulatif est le document livré, il ne peut pas retomber sur les
+   * textes de la maquette parce que le client a fermé son onglet.
+   */
+  reformulations: Record<string, string>;
+  deductions: Record<string, string>;
 }
 
 /** Champs modifiables au fil de la saisie. Tout est optionnel : on n'envoie

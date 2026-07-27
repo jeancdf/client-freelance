@@ -21,7 +21,9 @@ export function Entretien() {
 
   // Le contenu généré pour CE client quand il est arrivé, celui de la maquette
   // sinon : l'entretien ne s'arrête jamais faute de modèle.
-  const propositions = state.propositions[index] ?? point.props;
+  // Sur un dossier réel, on n'affiche rien tant que les propositions ajustées
+  // ne sont pas là : mieux vaut un champ vide que les réponses d'un autre métier.
+  const propositions = state.propositions[index] ?? (state.session ? [] : point.props);
   const aide = state.aide[index] ?? {
     titre: point.help.title,
     pistes: point.help.items.map((h) => ({ texte: h.text, effet: h.effect })),

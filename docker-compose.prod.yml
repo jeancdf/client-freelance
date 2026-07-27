@@ -26,6 +26,10 @@ services:
       # Obligatoire : sans lui le serveur en génère un sur le volume, et le
       # tableau de bord deviendrait inaccessible au prochain déploiement.
       CADRAGE_ADMIN_TOKEN: ${CADRAGE_ADMIN_TOKEN:?CADRAGE_ADMIN_TOKEN manquant — voir shared/.env}
+      # Sans clé, l'entretien tourne sur les contenus écrits de la maquette :
+      # moins ajusté au métier du client, mais jamais interrompu.
+      CADRAGE_OPENROUTER_KEY: ${CADRAGE_OPENROUTER_KEY:-}
+      CADRAGE_MODELE: ${CADRAGE_MODELE:-qwen/qwen3.7-plus}
       HOST: 0.0.0.0
       PORT: '8787'
 

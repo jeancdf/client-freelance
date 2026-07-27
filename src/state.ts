@@ -61,6 +61,13 @@ export interface State {
   aide: Record<number, Aide>;
   /** Ce qui a été déduit de chaque réponse, pour le récapitulatif. */
   deductions: Record<number, string>;
+  /**
+   * Les reformulations acceptées, par point. Le récapitulatif est le document
+   * livré : il cite la reformulation du client, pas celle de la maquette, et
+   * doit la retrouver après un rechargement — d'où un enregistrement par point
+   * et non la seule reformulation en cours.
+   */
+  reformulations: Record<number, string>;
   /** La reformulation à faire valider, quand on est sur l'écran dédié. */
   reformulation: string | null;
   /** La contradiction relevée sur le point en cours, s'il y en a une. */
@@ -94,6 +101,7 @@ export const initialState: State = {
   propositions: {},
   aide: {},
   deductions: {},
+  reformulations: {},
   reformulation: null,
   tensionCourante: null,
   occupe: false,
@@ -165,6 +173,13 @@ export function pointsEcrits(state: State): number[] {
 export function pointDeReprise(state: State): number {
   const manquant = POINTS.findIndex((_, k) => state.answers[k] === undefined);
   return manquant === -1 ? LAST : manquant;
+}
+
+/** Le serveur indexe par chaîne, à cause de JSON ; l'état indexe par nombre. */
+function parIndex(source: Record<string, string>): Record<number, string> {
+  const par: Record<number, string> = {};
+  for (const [cle, valeur] of Object.entries(source)) par[Number(cle)] = valeur;
+  return par;
 }
 
 /**
@@ -272,6 +287,11 @@ export function reducer(state: State, action: Action): State {
         answers,
         confirmed,
         tensionResolved,
+        // Ce que le modèle a écrit lors des sessions précédentes : sans cela,
+        // un client qui recharge verrait le récapitulatif retomber sur les
+        // textes de la maquette.
+        reformulations: parIndex(s.reformulations),
+        deductions: parIndex(s.deductions),
         screen: ecranDeReprise(s, Object.keys(answers).length > 0),
         scrollTick: state.scrollTick + 1,
       };
@@ -299,6 +319,12 @@ export function reducer(state: State, action: Action): State {
         deductions: action.deduction
           ? { ...state.deductions, [point]: action.deduction }
           : state.deductions,
+        // Conservée dès qu'elle arrive, pas seulement à la validation : le
+        // client peut rouvrir le récapitulatif sans être passé par l'écran de
+        // reformulation, et le serveur l'a déjà en cache de toute façon.
+        reformulations: action.reformulation
+          ? { ...state.reformulations, [point]: action.reformulation }
+          : state.reformulations,
         occupe: false,
       };
 

@@ -54,6 +54,46 @@ compris ceux qu'on n'atteint pas en jouant l'entretien dans l'ordre.
 `afficherPlan` — à passer à `false` en production, le sélecteur d'écrans étant
 un outil de démonstration.
 
+## Le modèle
+
+L'entretien est conduit par **`qwen/qwen3.7-plus`** via OpenRouter. Six
+capacités, toutes côté serveur — la clé ne touche jamais le navigateur :
+
+| Capacité | Ce qu'elle remplace |
+| --- | --- |
+| Propositions | Les réponses probables, écrites pour le métier du client |
+| Reformulation | « Si je comprends bien : … », tirée de ce qu'il a écrit |
+| Tension | La contradiction entre deux réponses, avec l'arbitrage proposé |
+| Aide | Trois pistes et leur conséquence chiffrée sur le projet |
+| Déduction | Ce qu'on peut poser sans le demander |
+| Analyse | Quels points des huit un document déposé couvre déjà |
+
+Deux partis pris, mesurés :
+
+- **Le raisonnement est désactivé.** Sur ces générations courtes et contraintes
+  il coûtait 2 945 tokens pour trois phrases, dix-neuf fois le prix, sans gain
+  de qualité. Un entretien complet revient à quelques centimes.
+- **Sortie en JSON strict.** Le serveur ne lit jamais de prose : ce qui n'entre
+  pas dans le schéma est un échec, pas une surprise.
+
+Tout est mis en cache dans la table `generation`, par empreinte de l'entrée : un
+client qui recharge revoit les mêmes propositions, et une réponse réécrite
+regénère sa reformulation. Le récapitulatif lit ce cache plutôt que la mémoire
+de l'onglet : le document livré cite la reformulation du client, y compris
+après un rechargement.
+
+**Sans clé, l'application marche.** Elle retombe sur les contenus écrits de la
+maquette — moins ajustés, jamais interrompus. Chaque repli est tracé dans le
+journal (`[generation] repli sur …`) : une dégradation silencieuse serait une
+panne invisible.
+
+Un repli n'est jamais mis en cache : il ne fige pas une version dégradée, mais
+il ne survit pas non plus au rechargement. Sur un dossier réel, le
+récapitulatif préfère alors n'afficher aucune reformulation plutôt que celle
+d'un autre client.
+
+Réglages : `CADRAGE_OPENROUTER_KEY`, `CADRAGE_MODELE`, `CADRAGE_LLM_TIMEOUT`.
+
 ## Déploiement
 
 En production : <https://client-contact.duckdns.org>
@@ -119,6 +159,13 @@ dans le `localStorage` — jamais dans une URL.
 
 ## Reste à faire
 
+- **Écran de dépôt.** La route `POST /api/cadrage/:token/analyse` fonctionne et
+  est testée, mais le panneau « Cinq points sur huit sont couverts » est encore
+  le texte figé de la maquette : il reste à le brancher sur la route.
+- **PDF et Word.** Seuls le texte collé et les fichiers texte sont lus. Les
+  binaires sont signalés au client (`fichiersIllisibles`) plutôt qu'ignorés en
+  silence, mais leur contenu n'entre pas dans l'analyse. Le modèle accepte les
+  images : une extraction PDF reste à ajouter.
 - **Courriel.** Le récapitulatif promet « vous recevrez une copie par
   courriel » : rien n'est envoyé. La validation enregistre le dossier, elle ne
   notifie personne — ni le client, ni Nicolas.

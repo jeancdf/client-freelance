@@ -2190,3 +2190,13 @@ a.rapide__file-name:hover {
   text-align: left;
   white-space: nowrap;
 }
+
+/* Le temps que les propositions ajustées au métier du client arrivent. */
+.props__attente {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-45);
+  margin: 0;
+  padding: 14px 0;
+}
