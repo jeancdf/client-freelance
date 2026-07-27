@@ -40,8 +40,22 @@ CREATE TABLE IF NOT EXISTS reponse (
   texte      TEXT NOT NULL,
   confirme   INTEGER NOT NULL DEFAULT 0,
   arbitre    INTEGER NOT NULL DEFAULT 0,
+  clos       INTEGER NOT NULL DEFAULT 0,
   maj_le     TEXT NOT NULL,
   PRIMARY KEY (cadrage_id, point)
+);
+
+-- Le fil d'un point : jusqu'à trois questions, chacune écrite à partir de la
+-- réponse précédente. La réponse retenue au dossier reste reponse.texte, qui
+-- rassemble ce fil : tout ce qui lit le dossier continue de lire ce champ.
+CREATE TABLE IF NOT EXISTS echange (
+  cadrage_id TEXT NOT NULL REFERENCES cadrage(id) ON DELETE CASCADE,
+  point      INTEGER NOT NULL,
+  rang       INTEGER NOT NULL,
+  question   TEXT NOT NULL,
+  reponse    TEXT NOT NULL,
+  maj_le     TEXT NOT NULL,
+  PRIMARY KEY (cadrage_id, point, rang)
 );
 
 -- Ce que le modèle a produit pour ce cadrage. Mis en cache pour deux raisons :
@@ -88,6 +102,8 @@ const AJOUTS: Array<{ table: string; colonne: string; definition: string }> = [
   { table: 'cadrage', colonne: 'commence_le', definition: 'TEXT' },
   // Où en était le client : le modèle en a besoin pour doser ses questions.
   { table: 'cadrage', colonne: 'maturite', definition: "TEXT NOT NULL DEFAULT ''" },
+  // Un point dont le fil est terminé ne se rouvre pas au rechargement.
+  { table: 'reponse', colonne: 'clos', definition: 'INTEGER NOT NULL DEFAULT 0' },
 ];
 
 function migrer(db: DatabaseSync): void {

@@ -8,8 +8,9 @@
 
 import { createHash } from 'node:crypto';
 import { POINTS } from '../../shared/points.ts';
-import type { Aide, Analyse, Ouverture, PointAnalyse, Tension } from '../../shared/api.ts';
+import type { Aide, Analyse, Choix, Echange, Ouverture, PointAnalyse, Tension } from '../../shared/api.ts';
 import type { Base } from './db.ts';
+import { RANG_MAX } from './repo.ts';
 import * as llm from './llm.ts';
 import {
   promptAide,
@@ -17,6 +18,7 @@ import {
   promptDeduction,
   promptOuverture,
   promptReformulation,
+  promptSuite,
   promptTension,
   type Contexte,
 } from './prompts.ts';
@@ -77,6 +79,14 @@ function ecrire(db: Base, cadrageId: string, point: number, genre: string, cle: 
 }
 
 /**
+ * Les générations en cours, par signature. Deux requêtes pour la même chose se
+ * croisent facilement — le préchargement du point suivant et son ouverture
+ * réelle, ou un simple double-clic — et chacune serait facturée. La seconde
+ * attend la première au lieu de rappeler le modèle.
+ */
+const enVol = new Map<string, Promise<unknown>>();
+
+/**
  * Rend la valeur en cache, sinon la génère, sinon le repli. Une panne du modèle
  * n'est jamais une erreur rendue au client : c'est une version moins ajustée.
  */
@@ -94,10 +104,20 @@ async function obtenir<T>(
 
   if (!llm.estActif()) return { valeur: repli(), origine: 'repli' };
 
+  const signature = `${cadrageId}|${point}|${genre}|${cle}`;
+  let course = enVol.get(signature) as Promise<T> | undefined;
+
+  if (!course) {
+    course = produire().then((valeur) => {
+      ecrire(db, cadrageId, point, genre, cle, valeur);
+      return valeur;
+    });
+    enVol.set(signature, course);
+    void course.catch(() => undefined).then(() => enVol.delete(signature));
+  }
+
   try {
-    const valeur = await produire();
-    ecrire(db, cadrageId, point, genre, cle, valeur);
-    return { valeur, origine: 'modele' };
+    return { valeur: await course, origine: 'modele' };
   } catch (cause) {
     // Le repli est silencieux pour le client, jamais pour l'exploitant : une
     // dégradation qui ne laisse pas de trace est une panne qu'on ne voit pas.
@@ -111,10 +131,18 @@ async function obtenir<T>(
 // --------------------------------------------------------------- ouverture --
 
 const SCHEMA_OUVERTURE = llm.objet({
+  // Au premier tour il vaut toujours false ; il porte la décision de fermer le
+  // fil sur les tours suivants.
+  termine: { type: 'boolean' },
   question: llm.texte,
   relance: llm.texte,
-  propositions: llm.liste(llm.texte, 3, 4),
+  choix: { type: 'string', enum: ['unique', 'multiple'] },
+  propositions: llm.liste(llm.texte, 2, 4),
 });
+
+interface OuvertureBrute extends Ouverture {
+  termine: boolean;
+}
 
 /**
  * Ce qui s'affiche à l'ouverture d'un point. La question elle-même est écrite
@@ -131,11 +159,12 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
     index,
     'ouverture',
     // Une fois écrite pour ce client, l'ouverture ne bouge plus : il doit
-    // retrouver la même question en revenant sur le point.
-    empreinte(`${ligne.client_metier}|${ligne.demande}`),
+    // retrouver la même question en revenant sur le point. Le point de départ
+    // entre dans la clé : il change la question, il doit la faire regénérer.
+    empreinte(`${ligne.client_metier}|${ligne.demande}|${ligne.maturite}`),
     async () => {
       const combien = point.props.length > 3 ? 4 : 3;
-      const { valeur } = await llm.generer<Ouverture>(
+      const { valeur } = await llm.generer<OuvertureBrute>(
         promptOuverture(contexte, point, combien),
         'ouverture',
         SCHEMA_OUVERTURE,
@@ -145,9 +174,53 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
         question: valeur.question.trim() || point.q,
         relance: valeur.relance.trim() || point.hint,
         propositions: valeur.propositions,
+        choix: valeur.choix === 'multiple' ? ('multiple' as Choix) : ('unique' as Choix),
       };
     },
-    () => ({ question: point.q, relance: point.hint, propositions: point.props }),
+    () => ({
+      question: point.q,
+      relance: point.hint,
+      propositions: point.props,
+      choix: 'unique' as Choix,
+    }),
+  );
+}
+
+/**
+ * La question suivante sur un point, ou `null` quand il est établi.
+ *
+ * Le repli est `null` : un modèle absent ne doit jamais inventer une relance,
+ * il ferme le point. Une question de plus coûte du temps au client, pas une
+ * dégradation d'affichage.
+ */
+export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange[], rang: number) {
+  const point = POINTS[index];
+  const contexte = contexteDe(db, ligne);
+
+  return obtenir<Ouverture | null>(
+    db,
+    ligne.id,
+    index,
+    `ouverture:${rang}`,
+    // Sur l'empreinte du fil : réécrire une réponse regénère la suite.
+    empreinte(fil.map((e) => `${e.question}|${e.reponse}`).join('||')),
+    async () => {
+      const { valeur } = await llm.generer<OuvertureBrute>(
+        promptSuite(contexte, point, fil, rang, RANG_MAX + 1 - rang),
+        'suite',
+        SCHEMA_OUVERTURE,
+        { temperature: 0.3 },
+      );
+
+      if (valeur.termine || !valeur.question.trim()) return null;
+      return {
+        question: valeur.question,
+        relance: valeur.relance,
+        propositions: valeur.propositions,
+        choix: valeur.choix === 'multiple' ? ('multiple' as Choix) : ('unique' as Choix),
+      };
+    },
+    () => null,
   );
 }
 
@@ -167,7 +240,7 @@ export function aide(db: Base, ligne: LigneCadrage, index: number) {
     ligne.id,
     index,
     'aide',
-    empreinte(`${ligne.client_metier}|${ligne.demande}`),
+    empreinte(`${ligne.client_metier}|${ligne.demande}|${ligne.maturite}`),
     async () => {
       const { valeur } = await llm.generer<Aide>(
         promptAide(contexte, point),

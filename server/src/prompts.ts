@@ -8,7 +8,7 @@
  */
 
 import { POINTS, type Point } from '../../shared/points.ts';
-import type { Maturite } from '../../shared/api.ts';
+import type { Echange, Maturite } from '../../shared/api.ts';
 import type { Message } from './llm.ts';
 
 export interface Contexte {
@@ -95,12 +95,71 @@ Relance de référence : « ${point.hint} »
 1. La question, reformulée avec son vocabulaire et ses réalités de métier. Elle doit chercher exactement la même chose que la référence, sans élargir ni rétrécir.
 2. La relance, une phrase, qui dit quoi raconter quand on ne sait pas par où commencer.
 3. ${combien} réponses probables, à la première personne, telles que LUI les formulerait à l'oral.
+4. "choix" : "multiple" si plusieurs de ces réponses peuvent être vraies chez lui en même temps (des utilisateurs, des contraintes, des choses hors périmètre), "unique" si la question demande de trancher une seule chose.
+
+Réponds "termine": false : au premier tour, on pose toujours la question.
 
 Contraintes :
 - La question et la relance vouvoient le client. Elles portent sur du concret : pas de "votre besoin", pas de "votre problématique". La question se termine par un point d'interrogation.
 - Les réponses font une à deux phrases, nettement différentes les unes des autres : pas trois nuances de la même.
 - Aucune ne contredit ce qu'il a déjà écrit.
 - N'utilise pas le mot "solution" ni le mot "outil" en début de phrase.`,
+    },
+  ];
+}
+
+/**
+ * La question de suite, écrite à partir de ce que le client vient de répondre.
+ *
+ * C'est le seul endroit où le produit peut devenir bavard : chaque relance est
+ * une minute de plus pour le client. Le modèle doit donc fermer dès que
+ * l'intention du point est établie, et une question ne se pose que si sa
+ * réponse change le chiffrage.
+ */
+export function promptSuite(
+  c: Contexte,
+  point: Point,
+  fil: Echange[],
+  rang: number,
+  restantes: number,
+): Message[] {
+  const echanges = fil
+    .map((e, i) => `Question ${i + 1} : « ${e.question} »\nSa réponse : « ${e.reponse} »`)
+    .join('\n\n');
+
+  return [
+    { role: 'system', content: VOIX },
+    {
+      role: 'user',
+      content: `${portrait(c)}
+
+Point ${point.num} — ${point.label}.
+Ce que ce point doit établir : ${point.intention}
+
+Ce qui s'est dit sur ce point :
+
+${echanges}
+
+Ce point est-il établi ?
+
+Réponds "termine": true dès que tu as de quoi chiffrer honnêtement ce point. C'est le cas le plus fréquent : une réponse concrète suffit presque toujours. Tu n'as le droit qu'à ${restantes} question${restantes > 1 ? 's' : ''} de plus sur ce point, et le client les paie de son temps.
+
+Ne pose une question de suite QUE si l'un de ces cas est vrai :
+- il manque un chiffre ou un ordre de grandeur sans lequel on ne peut pas chiffrer ;
+- sa réponse ouvre deux directions très différentes et il faut savoir laquelle ;
+- il a répondu à côté, ou par une généralité qui pourrait être celle de n'importe qui.
+
+N'en pose PAS pour :
+- approfondir par curiosité, ou par symétrie avec les autres points ;
+- lui faire confirmer ce qu'il vient de dire ;
+- demander quelque chose qu'un autre des huit points demandera de toute façon.
+
+Si tu poses la question ${rang + 1} :
+- elle part de SES mots, et se répond en une phrase ;
+- elle ne redemande rien de ce qui est écrit plus haut ;
+- "relance" dit en une phrase pourquoi ça compte pour le projet ;
+- deux à quatre réponses probables, à la première personne, tirées de ce qu'il vient de raconter ;
+- "choix" : "multiple" si plusieurs peuvent être vraies chez lui à la fois, "unique" sinon.`,
     },
   ];
 }

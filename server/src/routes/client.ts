@@ -18,12 +18,17 @@ import { config, dossierFichiers } from '../config.ts';
 import type { Base } from '../db.ts';
 import {
   ErreurRequete,
+  RANG_MAX,
   ajouterFichier,
   appliquerPatch,
+  echangesDe,
+  ecrireEchange,
   ecrireReponse,
   fichierParId,
   fichiersDe,
+  marquerReponse,
   parToken,
+  poserQuestion,
   session,
   supprimerFichier,
   validerDossier,
@@ -57,6 +62,22 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     return ligne;
   };
 
+  /**
+   * Le libellé de la question à laquelle le client vient de répondre. Il est
+   * relu du cache plutôt que reçu du navigateur : c'est ce qui garantit que le
+   * fil relu par le prestataire porte les questions réellement posées.
+   */
+  const questionDuRang = async (
+    ligne: ReturnType<typeof charger>,
+    point: number,
+    rang: number,
+  ): Promise<string> => {
+    if (rang === 0) return (await generation.ouverture(db, ligne, point)).valeur.question;
+    const fil = echangesDe(db, ligne.id)[String(point)] ?? [];
+    const precedent = await generation.suite(db, ligne, point, fil.slice(0, rang), rang);
+    return precedent.valeur?.question ?? POINTS[point].q;
+  };
+
   app.get<{ Params: ParamsToken }>('/api/cadrage/:token', async (req) => {
     return session(db, charger(req.params.token));
   });
@@ -75,21 +96,53 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     '/api/cadrage/:token/reponse/:point',
     async (req): Promise<SuiteReponse> => {
       const ligne = charger(req.params.token);
-      const point = Number(req.params.point);
-      const reponse = ecrireReponse(db, ligne, point, req.body);
+      const point = exigerPoint(req.params.point);
+      const rang = Number(req.body?.rang ?? 0);
+
+      // La question à laquelle ce texte répond, telle qu'elle a été posée : on
+      // la garde avec la réponse, sinon le fil ne se relit pas.
+      const posee = await questionDuRang(ligne, point, rang);
+      const reponse = ecrireEchange(db, ligne, point, rang, posee, req.body);
 
       // Relu après écriture : le contexte doit inclure la réponse qu'on vient
       // de recevoir, sinon la tension ne peut pas la confronter aux autres.
       const apres = parToken(db, req.params.token)!;
+      const fil = echangesDe(db, ligne.id)[String(point)] ?? [];
+
+      // Le plafond est tenu ici, pas par le modèle : trois questions par point,
+      // et le client peut fermer avant. En mode court, aucune relance — c'est
+      // ce que cette version promet.
+      const plafond = rang >= RANG_MAX || apres.mode === 'court';
+      const suite = req.body?.clore || plafond ? null : (await generation.suite(db, apres, point, fil, rang + 1)).valeur;
+
+      // Tant que le fil continue, la reformulation porterait sur une réponse
+      // encore en cours d'écriture : on ne la calcule pas, et on économise
+      // trois générations par échange intermédiaire.
+      if (suite) {
+        poserQuestion(db, ligne, point, rang + 1, suite.question);
+        return { reponse, suite, rang: rang + 1, reformulation: null, tension: null, deduction: null };
+      }
+
+      const close = ecrireReponse(db, apres, point, { texte: reponse.texte, clore: true });
+
+      // Le point suivant s'écrit dès maintenant, sans faire attendre celui-ci :
+      // le client va lire sa reformulation pendant ce temps, et il trouvera sa
+      // prochaine question déjà prête. Sa demande arrivera sur cette génération
+      // en cours plutôt que d'en lancer une seconde.
+      if (point + 1 < POINTS.length) {
+        void generation.ouverture(db, apres, point + 1).catch(() => undefined);
+      }
 
       const [reformulation, tension, deduction] = await Promise.all([
-        generation.reformulation(db, apres, point, reponse.texte),
-        generation.tension(db, apres, point, reponse.texte),
-        generation.deduction(db, apres, point, reponse.texte),
+        generation.reformulation(db, apres, point, close.texte),
+        generation.tension(db, apres, point, close.texte),
+        generation.deduction(db, apres, point, close.texte),
       ]);
 
       return {
-        reponse,
+        reponse: close,
+        suite: null,
+        rang: -1,
         reformulation: reformulation.valeur,
         tension: tension.valeur,
         deduction: deduction.valeur,
@@ -97,13 +150,43 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     },
   );
 
-  /** La question, sa relance et les réponses probables, écrites pour ce client. */
-  app.get<{ Params: ParamsToken & { point: string } }>(
+  /**
+   * Les drapeaux d'une réponse déjà écrite. Séparé du `PUT`, qui ajoute au fil :
+   * l'enregistrement de fond repasse ces drapeaux à chaque changement d'état, il
+   * ne doit surtout pas réécrire un échange au passage.
+   */
+  app.patch<{ Params: ParamsToken & { point: string }; Body: { confirme?: boolean; arbitre?: boolean } }>(
+    '/api/cadrage/:token/reponse/:point',
+    async (req) => {
+      const ligne = charger(req.params.token);
+      return marquerReponse(db, ligne, exigerPoint(req.params.point), req.body ?? {});
+    },
+  );
+
+  /**
+   * La question, sa relance et les réponses probables, écrites pour ce client.
+   * Le rang permet de retrouver une question de suite après un rechargement :
+   * elle est en cache, la relire ne relance pas le modèle. Sans contenu (204),
+   * c'est que le point n'attend plus de question.
+   */
+  app.get<{ Params: ParamsToken & { point: string }; Querystring: { rang?: string } }>(
     '/api/cadrage/:token/point/:point/ouverture',
-    async (req): Promise<OuvertureGeneree> => {
+    async (req, reply): Promise<OuvertureGeneree | undefined> => {
       const ligne = charger(req.params.token);
       const point = exigerPoint(req.params.point);
-      const { valeur, origine } = await generation.ouverture(db, ligne, point);
+      const rang = Number(req.query.rang ?? 0);
+
+      if (!rang) {
+        const { valeur, origine } = await generation.ouverture(db, ligne, point);
+        return { ...valeur, origine };
+      }
+
+      const fil = (echangesDe(db, ligne.id)[String(point)] ?? []).slice(0, rang);
+      const { valeur, origine } = await generation.suite(db, ligne, point, fil, rang);
+      if (!valeur) {
+        reply.code(204);
+        return undefined;
+      }
       return { ...valeur, origine };
     },
   );

@@ -7,9 +7,12 @@ import { POINTS } from '../../shared/points.ts';
 import { ouvrirBase, type Base } from './db.ts';
 import {
   ErreurRequete,
+  RANG_MAX,
   appliquerPatch,
   creer,
+  ecrireEchange,
   ecrireReponse,
+  marquerReponse,
   lister,
   parId,
   parToken,
@@ -35,6 +38,86 @@ after(() => {
 });
 
 const nouveau = (nom = 'Camille Dorval') => creer(db, { nom, metier: 'coach', demande: 'une appli' });
+
+describe('le fil d’un point', () => {
+  it('rassemble les réponses du fil dans l’ordre, une par ligne', () => {
+    const ligne = nouveau('Fil');
+    ecrireEchange(db, ligne, 0, 0, 'Ce qui vous a décidé ?', { texte: 'Je perds des chantiers.' });
+    ecrireEchange(db, ligne, 0, 1, 'Combien par mois ?', { texte: 'Deux ou trois.' });
+    const r = ecrireEchange(db, ligne, 0, 2, 'Depuis quand ?', { texte: 'Depuis un an.' });
+
+    assert.equal(r.texte, 'Je perds des chantiers.\nDeux ou trois.\nDepuis un an.');
+    assert.deepEqual(
+      session(db, ligne).echanges['0'].map((e) => e.question),
+      ['Ce qui vous a décidé ?', 'Combien par mois ?', 'Depuis quand ?'],
+    );
+  });
+
+  it('rend caduque la suite du fil quand une réponse est réécrite', () => {
+    const ligne = nouveau('Fil réécrit');
+    ecrireEchange(db, ligne, 1, 0, 'Qui va s’en servir ?', { texte: 'Mes clients.' });
+    ecrireEchange(db, ligne, 1, 1, 'Combien sont-ils ?', { texte: 'Une quarantaine.' });
+
+    // La première réponse change : la question suivante avait été écrite à
+    // partir d'un texte qui n'existe plus.
+    const r = ecrireEchange(db, ligne, 1, 0, 'Qui va s’en servir ?', { texte: 'Moi seul.' });
+    assert.equal(r.texte, 'Moi seul.');
+    assert.equal(session(db, ligne).echanges['1'].length, 1);
+  });
+
+  it('redemande la validation quand le fil s’enrichit', () => {
+    const ligne = nouveau('Fil confirmé');
+    ecrireEchange(db, ligne, 2, 0, 'Comment ça se passe ?', { texte: 'À la main.' });
+    ecrireReponse(db, ligne, 2, { texte: 'À la main.', confirme: true });
+    assert.equal(session(db, ligne).reponses['2'].confirme, true);
+
+    ecrireEchange(db, ligne, 2, 1, 'Avec quel outil ?', { texte: 'Word, puis WhatsApp.' });
+    assert.equal(session(db, ligne).reponses['2'].confirme, false);
+  });
+
+  it('marque un point relu sans toucher au fil', () => {
+    const ligne = nouveau('Drapeaux');
+    ecrireEchange(db, ligne, 5, 0, 'Le hors-périmètre ?', { texte: 'Pas de paiement en ligne.' });
+    ecrireEchange(db, ligne, 5, 1, 'Et la messagerie ?', { texte: 'Je garde WhatsApp.' });
+
+    // C'est le geste que fait l'enregistrement de fond à chaque changement
+    // d'état : il ne doit jamais réécrire un échange au passage.
+    marquerReponse(db, ligne, 5, { confirme: true, arbitre: false });
+
+    const s = session(db, ligne);
+    assert.equal(s.reponses['5'].confirme, true);
+    assert.equal(s.reponses['5'].texte, 'Pas de paiement en ligne.\nJe garde WhatsApp.');
+    assert.equal(s.echanges['5'].length, 2);
+  });
+
+  it('refuse de marquer un point sans réponse', () => {
+    const ligne = nouveau('Drapeaux sans réponse');
+    assert.throws(
+      () => marquerReponse(db, ligne, 6, { confirme: true }),
+      (erreur: unknown) => erreur instanceof ErreurRequete && erreur.code === 404,
+    );
+  });
+
+  it('refuse un rang au-delà du plafond', () => {
+    const ligne = nouveau('Plafond');
+    assert.throws(
+      () => ecrireEchange(db, ligne, 3, RANG_MAX + 1, 'Une question de trop ?', { texte: 'Non.' }),
+      (erreur: unknown) => erreur instanceof ErreurRequete && erreur.code === 400,
+    );
+  });
+
+  it('garde un point clos fermé', () => {
+    const ligne = nouveau('Clos');
+    ecrireEchange(db, ligne, 4, 0, 'Le cœur du projet ?', { texte: 'La prise de commande.' });
+    assert.equal(session(db, ligne).reponses['4'].clos, false);
+
+    ecrireEchange(db, ligne, 4, 0, 'Le cœur du projet ?', {
+      texte: 'La prise de commande.',
+      clore: true,
+    });
+    assert.equal(session(db, ligne).reponses['4'].clos, true);
+  });
+});
 
 describe('point de départ', () => {
   it('s’enregistre par le patch, puisqu’il est demandé pendant l’entretien', () => {

@@ -3,8 +3,10 @@
 Cadrage — l'entretien que remplit un client avant le premier rendez-vous, pour
 que le chiffrage parte d'un dossier écrit plutôt que d'un appel.
 
-Huit points, une question à la fois. Le client écrit avec ses mots ou choisit
-parmi des réponses probables ; l'outil reformule et fait valider, relève les
+Huit points, un court échange sur chacun : la question suivante est écrite à
+partir de la réponse précédente, jusqu'à trois par point. Le client écrit avec
+ses mots ou clique parmi des réponses probables — une seule ou plusieurs, selon
+ce que la question appelle. L'outil reformule et fait valider, relève les
 contradictions, et produit un récapitulatif où l'on distingue toujours ce que le
 client a dit, ce qu'il a validé, et ce qui a été déduit sans lui.
 
@@ -39,7 +41,7 @@ d'un client de démonstration en croyant que c'est le sien.
 | Accueil | `src/screens/Accueil.tsx` | Entrée du client invité, et les deux raccourcis |
 | Entretien | `src/screens/Entretien.tsx` | La question en cours, le sommaire, l'aide et l'arbitrage |
 | Reformulation | `src/screens/Reformulation.tsx` | « Si je comprends bien : … », à confirmer avant d'avancer |
-| Chemin rapide | `src/screens/Rapide.tsx` | Dépôt d'un cahier des charges, et ce qu'il manque |
+| Chemin rapide | `src/screens/Rapide.tsx` | Dépôt d'un cahier des charges, lu par le modèle, et ce qu'il manque |
 | Récapitulatif | `src/screens/Recap.tsx` | Le dossier relu et validé par le client |
 | Fin | `src/screens/Fin.tsx` | Accusé de transmission |
 | Reprise | `src/screens/Reprise.tsx` | Retour après interruption |
@@ -115,6 +117,7 @@ capacités, toutes côté serveur — la clé ne touche jamais le navigateur :
 | Capacité | Ce qu'elle remplace |
 | --- | --- |
 | Ouverture | La question, sa relance et les réponses probables, écrites pour le métier du client |
+| Suite | La question suivante sur le même point, tirée de ce qu'il vient de répondre |
 | Reformulation | « Si je comprends bien : … », tirée de ce qu'il a écrit |
 | Tension | La contradiction entre deux réponses, avec l'arbitrage proposé |
 | Aide | Trois pistes et leur conséquence chiffrée sur le projet |
@@ -131,7 +134,9 @@ Deux partis pris, mesurés :
 
 Tout est mis en cache dans la table `generation`, par empreinte de l'entrée : un
 client qui recharge revoit les mêmes propositions, et une réponse réécrite
-regénère sa reformulation. Le récapitulatif lit ce cache plutôt que la mémoire
+regénère sa reformulation. Deux requêtes pour la même génération se croisent
+facilement — le préchargement et l'ouverture réelle d'un point : la seconde
+attend la première au lieu de payer un second appel. Le récapitulatif lit ce cache plutôt que la mémoire
 de l'onglet : le document livré cite la reformulation du client, y compris
 après un rechargement.
 
@@ -146,6 +151,62 @@ récapitulatif préfère alors n'afficher aucune reformulation plutôt que celle
 d'un autre client.
 
 Réglages : `CADRAGE_OPENROUTER_KEY`, `CADRAGE_MODELE`, `CADRAGE_LLM_TIMEOUT`.
+
+## Le fil d'un point
+
+Un point n'est plus une question mais **jusqu'à trois**, chacune écrite à partir
+de la réponse précédente. Trois garde-fous, parce que c'est là que ce genre
+d'outil devient bavard :
+
+- **Le plafond est tenu par le code, pas par le modèle** (`RANG_MAX` dans
+  `server/src/repo.ts`). Au troisième échange le point se ferme, quoi qu'en dise
+  la génération.
+- **Le client peut couper court** dès la deuxième question : « c'est bon pour ce
+  point ».
+- **Le modèle doit fermer par défaut.** Sa consigne : ne relancer que s'il
+  manque un ordre de grandeur, si la réponse ouvre deux directions
+  incompatibles, ou si elle pourrait être celle de n'importe qui. Sans clé, il
+  n'y a aucune relance — un repli n'invente jamais une question de plus.
+
+Une relance ne coûte **aucune attente supplémentaire** : la question de suite
+voyage dans la réponse du `PUT`, et tant que le fil continue, reformulation,
+contradiction et déduction ne sont pas calculées. Un échange intermédiaire coûte
+donc une génération au lieu de trois.
+
+Le dossier ne change pas de forme : `reponse.texte` rassemble les réponses du
+fil, une par ligne, et tout ce qui lit le dossier — récapitulatif, tableau de
+bord, analyse — continue de lire ce seul champ. Le fil lui-même vit dans la
+table `echange`, avec les questions telles qu'elles ont été posées.
+
+**Mode court** : aucune relance, une question par point. C'est la soupape.
+
+## L'attente
+
+Écrire un point pour un métier prend quatre à six secondes, lire un document
+déposé une quinzaine. Une règle, tenue partout :
+
+> Ce qui est connu s'affiche tout de suite ; ce qui est écrit pour ce client
+> n'apparaît qu'écrit ; les textes de la maquette sont un repli de panne, jamais
+> un écran d'attente.
+
+- **Rien ne s'affiche à la place du contenu attendu** — ni la question, ni les
+  trois pistes d'aide, ni la couverture d'un document. Les montrer d'abord
+  ferait lire une question, puis la verrait remplacée par une autre. Le point
+  garde son numéro et son intitulé, les fichiers déposés restent listés : c'est
+  connu, ça n'attend rien.
+- **Un seul bloc d'attente** (`src/components/Attente.tsx`), avec une barre
+  réglée sur la durée observée. Elle s'arrête à 92 % : la fin appartient au
+  modèle, pas à l'animation, et sous `prefers-reduced-motion` elle disparaît
+  plutôt que de rester figée à zéro.
+- **Un repli va toujours avec un écran d'attente.** Depuis que les textes de
+  référence ne servent plus de patience, ils doivent servir de panne : deux
+  essais, puis le contenu de la maquette. Sans ça, une coupure réseau laisse le
+  client devant une attente sans fin.
+- **Le point suivant s'écrit pendant la reformulation.** Le serveur le lance dès
+  qu'il a enregistré la réponse, sans attendre d'être interrogé ; le navigateur
+  le redemande à la réception et tombe sur la génération déjà en cours. Le
+  client lit « Si je comprends bien : … » pendant ce temps et n'attend vraiment
+  qu'une fois, au premier point.
 
 ## Déploiement
 
@@ -211,13 +272,12 @@ dans le `localStorage` — jamais dans une URL.
 
 ## Reste à faire
 
-- **Écran de dépôt.** La route `POST /api/cadrage/:token/analyse` fonctionne et
-  est testée, mais le panneau « Cinq points sur huit sont couverts » est encore
-  le texte figé de la maquette : il reste à le brancher sur la route.
 - **PDF et Word.** Seuls le texte collé et les fichiers texte sont lus. Les
-  binaires sont signalés au client (`fichiersIllisibles`) plutôt qu'ignorés en
-  silence, mais leur contenu n'entre pas dans l'analyse. Le modèle accepte les
-  images : une extraction PDF reste à ajouter.
+  binaires sont nommés au client sur l'écran de dépôt (« je n'ai pas pu lire
+  *devis.pdf* ») plutôt qu'ignorés en silence, mais leur contenu n'entre pas
+  dans l'analyse. Le modèle accepte les images : une extraction PDF reste à
+  ajouter. C'est le manque le plus visible du chemin rapide, puisque la plupart
+  des cahiers des charges arrivent en PDF.
 - **Courriel.** Rien n'est envoyé nulle part. Le récapitulatif promet « vous
   recevrez une copie par courriel », et l'ouverture en libre-service collecte
   une adresse sans jamais s'en servir : le client qui perd son lien perd son

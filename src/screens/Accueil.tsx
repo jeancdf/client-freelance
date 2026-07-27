@@ -15,7 +15,7 @@ export function Accueil() {
           <h1 className="serif accueil__title">
             Avant notre rendez-vous,
             <br />
-            prenons quinze minutes pour comprendre votre projet.
+            prenons le temps de comprendre votre projet.
           </h1>
           <p className="accueil__lead">
             Vous répondez à une question à la fois, avec vos mots — ou en choisissant parmi les
@@ -35,7 +35,9 @@ export function Accueil() {
             >
               Commencer l'entretien
             </button>
-            <span className="note accueil__meta">15 min environ · aucun compte à créer</span>
+            <span className="note accueil__meta">
+              à votre rythme · aucun compte à créer
+            </span>
           </div>
           <p className="note accueil__resume">
             Vous pouvez vous arrêter à tout moment et reprendre depuis n'importe quel appareil.
@@ -46,10 +48,10 @@ export function Accueil() {
           <p className="lbl accueil__aside-kicker">Si vous êtes déjà prêt</p>
           <div className="accueil__paths">
             <div className="accueil__path">
-              <h2 className="serif accueil__path-title">Version courte — cinq minutes</h2>
+              <h2 className="serif accueil__path-title">Version courte — droit au but</h2>
               <p className="accueil__path-body">
-                Les mêmes huit points, mais je vais droit au but : une question par point, des
-                réponses déjà rédigées à choisir ou à corriger, aucune relance.
+                Les mêmes huit points, mais une seule question chacun : des réponses déjà
+                rédigées à choisir ou à corriger, et je ne rebondis sur rien.
               </p>
               <button
                 type="button"
@@ -64,7 +66,7 @@ export function Accueil() {
               <h2 className="serif accueil__path-title">J'ai déjà un cahier des charges</h2>
               <p className="accueil__path-body">
                 Déposez le document et vos liens. Je le lis, puis je ne vous demande que ce qui
-                manque — quatre minutes.
+                manque.
               </p>
               <button
                 type="button"

@@ -1,7 +1,9 @@
 import { POINTS } from '../shared/points';
 import type {
   Aide,
+  Choix,
   Client,
+  Echange,
   Fichier,
   Maturite,
   Mode,
@@ -59,6 +61,8 @@ export interface State {
   confirmed: Record<number, boolean>;
   /** Points dont l'arbitrage a déjà été rendu : on ne le redemande pas. */
   tensionResolved: Record<number, boolean>;
+  /** Points dont le fil est terminé. Un fil ouvert se reprend là où il en est. */
+  clos: Record<number, boolean>;
   help: boolean;
   tension: boolean;
   dossierOpen: boolean;
@@ -71,11 +75,16 @@ export interface State {
   session: SessionMeta | null;
 
   /**
-   * La question, sa relance et les réponses probables, écrites pour ce client.
-   * Absente tant que le serveur n'a pas répondu : l'écran affiche alors la
-   * formulation de référence du point.
+   * Les questions écrites pour ce client, par « point:rang » — un point porte
+   * jusqu'à trois questions, chacune tirée de la réponse précédente.
+   * Absente tant que le serveur n'a pas répondu : l'écran attend plutôt que
+   * d'afficher la formulation de référence.
    */
-  ouvertures: Record<number, Ouverture>;
+  ouvertures: Record<string, Ouverture>;
+  /** Le fil déjà échangé sur chaque point : ce que le client voit au-dessus. */
+  echanges: Record<number, Echange[]>;
+  /** Rang de la question en cours sur le point affiché. */
+  rang: number;
   /** Pistes d'aide générées, par point. */
   aide: Record<number, Aide>;
   /** Ce qui a été déduit de chaque réponse, pour le récapitulatif. */
@@ -107,6 +116,7 @@ export const initialState: State = {
   answers: {},
   confirmed: {},
   tensionResolved: {},
+  clos: {},
   help: false,
   tension: false,
   dossierOpen: false,
@@ -118,6 +128,8 @@ export const initialState: State = {
   lien2: '',
   session: null,
   ouvertures: {},
+  echanges: {},
+  rang: 0,
   aide: {},
   deductions: {},
   reformulations: {},
@@ -129,7 +141,7 @@ export const initialState: State = {
 
 export type Action =
   | { type: 'hydrate'; token: string; session: Session }
-  | { type: 'ouverture'; point: number; ouverture: Ouverture }
+  | { type: 'ouverture'; point: number; rang: number; ouverture: Ouverture }
   | { type: 'depart'; maturite: Maturite }
   | { type: 'aide'; point: number; aide: Aide }
   | { type: 'occupe'; valeur: boolean }
@@ -137,6 +149,11 @@ export type Action =
       type: 'suite';
       point: number;
       texte: string;
+      /** La question suivante sur ce point, ou `null` s'il est clos. */
+      question: Ouverture | null;
+      rang: number;
+      /** Le fil du point, tel qu'il est après cette réponse. */
+      echanges: Echange[];
       reformulation: string | null;
       tension: Tension | null;
       deduction: string | null;
@@ -170,18 +187,22 @@ export type Action =
   | { type: 'setLien1'; value: string }
   | { type: 'setLien2'; value: string };
 
+/** La clé d'une question dans `ouvertures` : un point, un rang. */
+export const cleOuverture = (point: number, rang: number) => `${point}:${rang}`;
+
 /**
- * Ce qui s'affiche pour un point. Tant que le serveur n'a rien rendu, c'est la
- * formulation de référence : l'entretien ne reste jamais muet en attendant le
- * modèle.
+ * Ce qui s'affiche pour la question en cours. Tant que le serveur n'a rien
+ * rendu, c'est la formulation de référence : l'entretien ne reste jamais muet
+ * en attendant le modèle.
  */
-export function ouvertureOf(state: State, index: number): Ouverture {
+export function ouvertureOf(state: State, index: number, rang = state.rang): Ouverture {
   const point = POINTS[index];
   return (
-    state.ouvertures[index] ?? {
+    state.ouvertures[cleOuverture(index, rang)] ?? {
       question: point.q,
       relance: point.hint,
       propositions: point.props,
+      choix: 'unique' as Choix,
     }
   );
 }
@@ -201,14 +222,39 @@ export function pointsEcrits(state: State): number[] {
   return POINTS.map((_, k) => k).filter((k) => state.answers[k] !== undefined);
 }
 
+/** Le plafond de questions par point, tenu aussi côté serveur. */
+const RANG_MAX = 2;
+
 /**
- * Le premier point encore vide : celui sur lequel on reprend l'entretien.
- * L'écran de reprise annonce ce point et le bouton doit y mener — d'où un
- * seul calcul, partagé.
+ * Le point sur lequel on reprend l'entretien : un fil laissé ouvert d'abord,
+ * le premier point vide ensuite. L'écran de reprise annonce ce point et le
+ * bouton doit y mener — d'où un seul calcul, partagé.
  */
 export function pointDeReprise(state: State): number {
+  const ouvert = POINTS.findIndex((_, k) => state.answers[k] !== undefined && !state.clos[k]);
+  if (ouvert !== -1) return ouvert;
+
   const manquant = POINTS.findIndex((_, k) => state.answers[k] === undefined);
   return manquant === -1 ? LAST : manquant;
+}
+
+/**
+ * Le rang de la question en attente dans un fil : celle qui est posée et pas
+ * encore répondue. Un point clos, ou jamais ouvert, repart de sa première.
+ */
+function rangEnCours(fil: Echange[], clos?: boolean, reponse?: string): number {
+  if (clos || reponse === undefined) return 0;
+  const attente = fil.findIndex((e) => !e.reponse.trim());
+  return attente === -1 ? Math.min(fil.length, RANG_MAX) : attente;
+}
+
+/**
+ * Où reprendre dans le fil d'un point. Un fil ouvert repart à sa question en
+ * cours, brouillon vide ; un point clos qu'on rouvre pour le corriger repart de
+ * sa première question, avec ce qui a été écrit.
+ */
+export function rangDeReprise(state: State, step: number): number {
+  return rangEnCours(state.echanges[step] ?? [], state.clos[step], state.answers[step]);
 }
 
 /** Le serveur indexe par chaîne, à cause de JSON ; l'état indexe par nombre. */
@@ -233,17 +279,21 @@ function demoAnswers(upTo: number): Pick<State, 'answers' | 'confirmed'> {
 }
 
 function goStep(state: State, step: number, extra: Partial<State> = {}): State {
+  const rang = rangDeReprise(state, step);
   return {
     ...state,
     screen: 'entretien',
     step,
+    rang,
     help: false,
     tension: false,
     tensionCourante: null,
     reformulation: null,
     occupe: false,
     dossierOpen: false,
-    draft: state.answers[step] ?? '',
+    // Un fil en cours attend une nouvelle réponse ; un point clos qu'on rouvre
+    // rend ses mots au client pour qu'il les corrige.
+    draft: rang > 0 ? '' : (state.answers[step] ?? ''),
     scrollTick: state.scrollTick + 1,
     ...extra,
   };
@@ -298,12 +348,31 @@ export function reducer(state: State, action: Action): State {
       const answers: Record<number, string> = {};
       const confirmed: Record<number, boolean> = {};
       const tensionResolved: Record<number, boolean> = {};
+      const clos: Record<number, boolean> = {};
+      const echanges: Record<number, Echange[]> = {};
 
       for (const [cle, reponse] of Object.entries(s.reponses)) {
         const index = Number(cle);
         answers[index] = reponse.texte;
         if (reponse.confirme) confirmed[index] = true;
         if (reponse.arbitre) tensionResolved[index] = true;
+        if (reponse.clos) clos[index] = true;
+      }
+      // Une question posée sans réponse est celle que le client avait sous les
+      // yeux : on la remet en place, avec son rang.
+      const ouvertures: Record<string, Ouverture> = {};
+      for (const [cle, fil] of Object.entries(s.echanges)) {
+        const index = Number(cle);
+        echanges[index] = fil;
+        const attente = fil.findIndex((e) => !e.reponse.trim());
+        if (attente !== -1) {
+          ouvertures[cleOuverture(index, attente)] = {
+            question: fil[attente].question,
+            relance: '',
+            propositions: [],
+            choix: 'unique',
+          };
+        }
       }
 
       return {
@@ -329,6 +398,10 @@ export function reducer(state: State, action: Action): State {
         answers,
         confirmed,
         tensionResolved,
+        clos,
+        echanges,
+        ouvertures,
+        rang: rangEnCours(echanges[s.step] ?? [], clos[s.step], answers[s.step]),
         // Ce que le modèle a écrit lors des sessions précédentes : sans cela,
         // un client qui recharge verrait le récapitulatif retomber sur les
         // textes de la maquette.
@@ -340,7 +413,13 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'ouverture':
-      return { ...state, ouvertures: { ...state.ouvertures, [action.point]: action.ouverture } };
+      return {
+        ...state,
+        ouvertures: {
+          ...state.ouvertures,
+          [cleOuverture(action.point, action.rang)]: action.ouverture,
+        },
+      };
 
     case 'depart':
       if (!state.session) return state;
@@ -359,9 +438,34 @@ export function reducer(state: State, action: Action): State {
      */
     case 'suite': {
       const point = action.point;
+
+      // Le fil continue : on reste sur le même point, une question plus loin.
+      // Le brouillon repart à vide — c'est une nouvelle question, pas une
+      // correction de la précédente.
+      if (action.question) {
+        return {
+          ...state,
+          answers: { ...state.answers, [point]: action.texte },
+          echanges: {
+            ...state.echanges,
+            [point]: [...action.echanges, { question: action.question.question, reponse: '' }],
+          },
+          ouvertures: {
+            ...state.ouvertures,
+            [cleOuverture(point, action.rang)]: action.question,
+          },
+          rang: action.rang,
+          draft: '',
+          occupe: false,
+          scrollTick: state.scrollTick + 1,
+        };
+      }
+
       const base: State = {
         ...state,
         answers: { ...state.answers, [point]: action.texte },
+        echanges: { ...state.echanges, [point]: action.echanges },
+        clos: { ...state.clos, [point]: true },
         deductions: action.deduction
           ? { ...state.deductions, [point]: action.deduction }
           : state.deductions,
@@ -411,10 +515,13 @@ export function reducer(state: State, action: Action): State {
         mode: action.mode,
         voie: 'entretien',
         step: 0,
+        rang: 0,
         draft: '',
         answers: {},
         confirmed: {},
         tensionResolved: {},
+        clos: {},
+        echanges: {},
         dossierOpen: false,
       });
 
@@ -423,10 +530,13 @@ export function reducer(state: State, action: Action): State {
         mode: 'long',
         voie: 'entretien',
         step: 0,
+        rang: 0,
         draft: '',
         answers: {},
         confirmed: {},
         tensionResolved: {},
+        clos: {},
+        echanges: {},
         dossierOpen: false,
       });
 
@@ -471,8 +581,22 @@ export function reducer(state: State, action: Action): State {
     case 'setDraft':
       return { ...state, draft: action.value };
 
-    case 'pickProp':
-      return { ...state, draft: action.text };
+    /**
+     * En choix unique, la suggestion remplace la réponse. En choix multiple,
+     * elle s'ajoute sur sa propre ligne, et un second clic la retire : le
+     * client dont la situation tient de deux propositions n'a pas à en
+     * recopier une à la main.
+     */
+    case 'pickProp': {
+      if (ouvertureOf(state, i).choix === 'unique') {
+        return { ...state, draft: action.text };
+      }
+
+      const lignes = state.draft.split('\n').filter((l) => l.trim());
+      const deja = lignes.indexOf(action.text);
+      const suivantes = deja === -1 ? [...lignes, action.text] : lignes.filter((_, k) => k !== deja);
+      return { ...state, draft: suivantes.join('\n') };
+    }
 
     case 'openHelp':
       return { ...state, help: true, scrollTick: state.scrollTick + 1 };
@@ -480,11 +604,30 @@ export function reducer(state: State, action: Action): State {
     case 'closeHelp':
       return { ...state, help: false };
 
-    case 'pickHelp':
-      return { ...state, help: false, draft: action.text };
+    // Une piste d'aide s'ajoute comme une suggestion : même geste, même règle.
+    case 'pickHelp': {
+      if (ouvertureOf(state, i).choix === 'unique') {
+        return { ...state, help: false, draft: action.text };
+      }
+      const lignes = state.draft.split('\n').filter((l) => l.trim());
+      return {
+        ...state,
+        help: false,
+        draft: lignes.includes(action.text)
+          ? lignes.filter((l) => l !== action.text).join('\n')
+          : [...lignes, action.text].join('\n'),
+      };
+    }
 
     // « La simplicité passe d'abord » : la réponse bascule sur l'autre priorité.
     case 'tensionSimple': {
+      // Sur un dossier réel, on ne substitue rien aux mots du client : la
+      // proposition de repli est celle d'un autre métier. On note l'arbitrage,
+      // le texte reste le sien.
+      if (state.session) {
+        return { ...state, tension: false, tensionResolved: { ...state.tensionResolved, [i]: true } };
+      }
+
       const fallback = POINTS[i].props[1];
       return {
         ...state,

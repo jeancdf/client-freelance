@@ -18,6 +18,23 @@ export type Maturite = 'idee' | 'forme' | 'specs';
 
 export type Statut = 'en_cours' | 'valide';
 
+/**
+ * Ce qu'une question attend. Le modèle le décide question par question : « qui
+ * va s'en servir » appelle plusieurs réponses, « la seule chose sans laquelle
+ * ça ne sert à rien » n'en appelle qu'une.
+ */
+export type Choix = 'unique' | 'multiple';
+
+/**
+ * Une question posée sur un point, et ce que le client y a répondu. Une réponse
+ * vide veut dire que la question est posée mais pas encore répondue : c'est
+ * ainsi qu'un fil interrompu se retrouve au rechargement.
+ */
+export interface Echange {
+  question: string;
+  reponse: string;
+}
+
 export interface Reponse {
   /** Les mots du client, jamais retouchés. */
   texte: string;
@@ -25,6 +42,8 @@ export interface Reponse {
   confirme: boolean;
   /** L'arbitrage a été rendu : on ne le redemande pas. */
   arbitre: boolean;
+  /** Le fil de questions sur ce point est terminé : il ne se rouvre pas seul. */
+  clos: boolean;
   majLe: string;
 }
 
@@ -57,6 +76,8 @@ export interface Session {
   maturite: Maturite | '';
   /** Réponses par index de point (0 à 7), en clés de chaîne pour JSON. */
   reponses: Record<string, Reponse>;
+  /** Le fil de chaque point : sans lui, un rechargement perdrait la question en cours. */
+  echanges: Record<string, Echange[]>;
   fichiers: Fichier[];
   creeLe: string;
   majLe: string;
@@ -94,6 +115,10 @@ export interface PutReponse {
   texte: string;
   confirme?: boolean;
   arbitre?: boolean;
+  /** Rang de la question à laquelle ce texte répond, dans le fil du point. */
+  rang?: number;
+  /** Le client déclare le point complet : pas de question de suite. */
+  clore?: boolean;
 }
 
 /** Une ligne du tableau des cadrages, côté prestataire. */
@@ -184,6 +209,7 @@ export interface Ouverture {
   question: string;
   relance: string;
   propositions: string[];
+  choix: Choix;
 }
 
 export interface OuvertureGeneree extends Ouverture {
@@ -197,7 +223,15 @@ export interface AideGeneree extends Aide {
 /** Ce que le serveur rend après l'écriture d'une réponse. */
 export interface SuiteReponse {
   reponse: Reponse;
-  /** `null` si le point n'appelle pas de reformulation. */
+  /**
+   * La question suivante sur ce même point, ou `null` quand il est clos. Tant
+   * qu'il y a une suite, la reformulation et le reste ne sont pas calculés :
+   * ils porteraient sur une réponse encore en cours d'écriture.
+   */
+  suite: Ouverture | null;
+  /** Rang de `suite` dans le fil (1 ou 2), `-1` quand le point est clos. */
+  rang: number;
+  /** `null` si le point n'appelle pas de reformulation, ou n'est pas clos. */
   reformulation: string | null;
   /** `null` s'il n'y a pas de contradiction. */
   tension: Tension | null;

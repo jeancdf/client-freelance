@@ -8,6 +8,7 @@ import type {
   OuvertureGeneree,
   PatchSession,
   PutReponse,
+  Reponse,
   ReponseCadrages,
   Session,
   SuiteReponse,
@@ -66,8 +67,17 @@ export const patcher = (token: string, patch: PatchSession) =>
 export const ecrireReponse = (token: string, point: number, entree: PutReponse) =>
   requete<SuiteReponse>(`/cadrage/${token}/reponse/${point}`, json('PUT', entree));
 
-export const lireOuverture = (token: string, point: number) =>
-  requete<OuvertureGeneree>(`/cadrage/${token}/point/${point}/ouverture`);
+/** Marque un point relu et accepté, ou son arbitrage rendu. N'écrit aucun texte. */
+export const marquerReponse = (
+  token: string,
+  point: number,
+  drapeaux: { confirme?: boolean; arbitre?: boolean },
+) => requete<Reponse>(`/cadrage/${token}/reponse/${point}`, json('PATCH', drapeaux));
+
+export const lireOuverture = (token: string, point: number, rang = 0) =>
+  requete<OuvertureGeneree | undefined>(
+    `/cadrage/${token}/point/${point}/ouverture?rang=${rang}`,
+  );
 
 export const lireAide = (token: string, point: number) =>
   requete<AideGeneree>(`/cadrage/${token}/point/${point}/aide`);

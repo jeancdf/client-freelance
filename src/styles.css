@@ -636,6 +636,127 @@ textarea.landing__input {
   text-align: center;
 }
 
+/* ------------------------------------------------------------------ fil -- */
+
+/* Ce qui s'est déjà dit sur le point en cours. Sans lui, une question de suite
+   paraît sortie de nulle part. */
+.fil {
+  border-left: 2px solid var(--rule);
+  padding-left: 16px;
+  margin: 0 0 34px;
+}
+
+.fil__label {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  margin: 0 0 14px;
+}
+
+.fil__echange + .fil__echange {
+  margin-top: 14px;
+}
+
+.fil__question {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-45);
+  margin: 0 0 4px;
+}
+
+.fil__reponse {
+  font-size: 15.5px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* La marque d'une suggestion cumulable : + à prendre, × à retirer. */
+.prop__marque {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--ink-45);
+  margin-right: 10px;
+}
+
+.prop--picked .prop__marque {
+  color: inherit;
+}
+
+.answer__clore {
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 14px;
+  margin-right: auto;
+}
+
+/* -------------------------------------------------------------- attente -- */
+
+/* Ce qui occupe la place de la question pendant qu'elle s'écrit. Même hauteur
+   de texte qu'elle, pour que l'arrivée ne fasse pas sauter la page. */
+.attente {
+  padding: 4px 0 8px;
+}
+
+.attente__texte {
+  font-size: var(--qsize);
+  line-height: 1.14;
+  letter-spacing: -0.015em;
+  color: var(--ink-45);
+  margin: 0 0 14px;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.attente__note {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.attente__piste {
+  height: 2px;
+  background: var(--rule-soft);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0 0 14px;
+  max-width: 320px;
+}
+
+/* Elle s'arrête à 92 % : la fin appartient au modèle, pas à l'animation. */
+.attente__barre {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  animation-name: remplir;
+  animation-timing-function: cubic-bezier(0.15, 0.75, 0.35, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes remplir {
+  from {
+    width: 0;
+  }
+  to {
+    width: 92%;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Toute animation est coupée plus haut sous ce réglage : une barre figée à zéro
+   mentirait, on la retire et le texte suffit. */
+@media (prefers-reduced-motion: reduce) {
+  .attente__piste {
+    display: none;
+  }
+}
+
 /* --------------------------------------------------------------- départ -- */
 
 /* La question qui précède les huit points. Même mise en page que la
@@ -1483,6 +1604,23 @@ textarea.landing__input {
   min-height: 52px;
   padding: 0 20px;
   font-size: 16px;
+}
+
+/* Ce que la lecture n'a pas pu ouvrir : dit au client, pas ravalé. */
+.rapide__illisible {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-70);
+  border-left: 2px solid var(--rule);
+  padding-left: 12px;
+  margin: 18px 0 0;
+}
+
+.rapide__relire {
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 14px;
+  margin-top: 18px;
 }
 
 .rapide__submit-note {

@@ -18,6 +18,8 @@ export interface Entretien {
   confirmer: () => Promise<void>;
   /** Tranche la contradiction : bascule sur l'autre priorité, ou maintient. */
   trancher: (choix: 'bascule' | 'maintien') => Promise<void>;
+  /** Déclare le point complet : pas de question de suite. */
+  clore: () => Promise<void>;
 }
 
 export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretien {
@@ -29,7 +31,12 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
   // rien, et le client y retrouve la question qu'il avait lue.
   useEffect(() => {
     if (!token || state.screen !== 'entretien') return;
-    if (state.ouvertures[index]) return;
+    // Une question de suite arrive normalement avec la réponse précédente. On
+    // ne la redemande que si elle manque ou lui manque ses réponses probables :
+    // c'est le cas d'un client qui a rechargé en plein fil.
+    const rang = state.rang;
+    const connue = state.ouvertures[`${index}:${rang}`];
+    if (connue && connue.propositions.length > 0) return;
 
     let annule = false;
 
@@ -38,12 +45,18 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
       // serveur qui vient de redémarrer, pas une panne.
       for (let essai = 0; essai < 2 && !annule; essai++) {
         try {
-          const r = await api.lireOuverture(token, index);
-          if (annule) return;
+          const r = await api.lireOuverture(token, index, rang);
+          if (annule || !r) return;
           dispatch({
             type: 'ouverture',
             point: index,
-            ouverture: { question: r.question, relance: r.relance, propositions: r.propositions },
+            rang,
+            ouverture: {
+              question: r.question,
+              relance: r.relance,
+              propositions: r.propositions,
+              choix: r.choix,
+            },
           });
           return;
         } catch {
@@ -54,19 +67,25 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
       // Le serveur ne répond pas. On pose la formulation de référence : le
       // client aura des questions moins ajustées, mais il aura son champ de
       // réponse. L'attendre indéfiniment serait une page morte.
-      if (annule) return;
+      if (annule || rang > 0) return;
       const point = POINTS[index];
       dispatch({
         type: 'ouverture',
         point: index,
-        ouverture: { question: point.q, relance: point.hint, propositions: point.props },
+        rang: 0,
+        ouverture: {
+          question: point.q,
+          relance: point.hint,
+          propositions: point.props,
+          choix: 'unique',
+        },
       });
     })();
 
     return () => {
       annule = true;
     };
-  }, [token, index, state.screen, state.ouvertures, dispatch]);
+  }, [token, index, state.rang, state.screen, state.ouvertures, dispatch]);
 
   // Les pistes d'aide, seulement quand le client les demande : c'est l'appel
   // le plus cher et le moins souvent utile.
@@ -74,12 +93,33 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
     if (!token || !state.help || state.aide[index]) return;
 
     let annule = false;
-    api
-      .lireAide(token, index)
-      .then((r) => {
-        if (!annule) dispatch({ type: 'aide', point: index, aide: { titre: r.titre, pistes: r.pistes } });
-      })
-      .catch(() => {});
+
+    void (async () => {
+      for (let essai = 0; essai < 2 && !annule; essai++) {
+        try {
+          const r = await api.lireAide(token, index);
+          if (annule) return;
+          dispatch({ type: 'aide', point: index, aide: { titre: r.titre, pistes: r.pistes } });
+          return;
+        } catch {
+          if (essai === 0) await new Promise((suite) => setTimeout(suite, 1000));
+        }
+      }
+
+      // Sans ce repli, l'écran resterait sur son attente : depuis que les
+      // pistes de référence ne servent plus de patience, elles doivent servir
+      // de panne. Le client a besoin de trois pistes, même moins ajustées.
+      if (annule) return;
+      const point = POINTS[index];
+      dispatch({
+        type: 'aide',
+        point: index,
+        aide: {
+          titre: point.help.title,
+          pistes: point.help.items.map((piste) => ({ texte: piste.text, effet: piste.effect })),
+        },
+      });
+    })();
 
     return () => {
       annule = true;
@@ -87,37 +127,80 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
   }, [token, index, state.help, state.aide, dispatch]);
 
   const ecrire = useCallback(
-    async (texte: string, extra: { confirme?: boolean; arbitre?: boolean } = {}) => {
+    async (
+      texte: string,
+      extra: { confirme?: boolean; arbitre?: boolean; clore?: boolean } = {},
+    ) => {
       if (!token) return;
-      const suite = await api.ecrireReponse(token, index, { texte, ...extra });
+      const rang = state.rang;
+      const posee = ouvertureOf(state, index, rang).question;
+      const suite = await api.ecrireReponse(token, index, { texte, rang, ...extra });
+
+      const fil = [...(state.echanges[index] ?? []).slice(0, rang), { question: posee, reponse: texte }];
+
       dispatch({
         type: 'suite',
         point: index,
         texte: suite.reponse.texte,
+        question: suite.suite,
+        rang: suite.rang,
+        echanges: fil,
         reformulation: suite.reformulation,
         tension: suite.tension,
         deduction: suite.deduction,
       });
+
+      // Le point suivant s'écrit pendant que le client lit sa reformulation :
+      // c'est le seul moment où il attend déjà quelque chose, et la réponse
+      // qu'il vient de donner fait partie du contexte. Inutile tant que le fil
+      // de ce point-ci continue — le client n'ira pas au suivant.
+      if (!suite.suite && index + 1 < POINTS.length) {
+        void api
+          .lireOuverture(token, index + 1)
+          .then((r) => {
+            if (!r) return;
+            dispatch({
+              type: 'ouverture',
+              point: index + 1,
+              rang: 0,
+              ouverture: {
+                question: r.question,
+                relance: r.relance,
+                propositions: r.propositions,
+                choix: r.choix,
+              },
+            });
+          })
+          .catch(() => {
+            // Sans préchargement, le point suivant se chargera à son ouverture.
+          });
+      }
     },
-    [token, index, dispatch],
+    [token, index, state, dispatch],
   );
 
-  const soumettre = useCallback(async () => {
-    const texte = state.draft.trim() || ouvertureOf(state, index).propositions[0] || '';
-    if (!token || !texte) {
-      dispatch({ type: 'submit' });
-      return;
-    }
+  const envoyer = useCallback(
+    async (extra: { clore?: boolean } = {}) => {
+      const texte = state.draft.trim() || ouvertureOf(state, index).propositions[0] || '';
+      if (!token || !texte) {
+        dispatch({ type: 'submit' });
+        return;
+      }
 
-    dispatch({ type: 'submit' });
-    try {
-      await ecrire(texte);
-    } catch {
-      // L'écriture a échoué : on rend la main plutôt que de laisser le bouton
-      // tourner indéfiniment. `usePersistance` réessaiera en fond.
-      dispatch({ type: 'occupe', valeur: false });
-    }
-  }, [token, index, state, ecrire, dispatch]);
+      dispatch({ type: 'submit' });
+      try {
+        await ecrire(texte, extra);
+      } catch {
+        // L'écriture a échoué : on rend la main plutôt que de laisser le bouton
+        // tourner indéfiniment. `usePersistance` réessaiera en fond.
+        dispatch({ type: 'occupe', valeur: false });
+      }
+    },
+    [token, index, state, ecrire, dispatch],
+  );
+
+  const soumettre = useCallback(() => envoyer(), [envoyer]);
+  const clore = useCallback(() => envoyer({ clore: true }), [envoyer]);
 
   const confirmer = useCallback(async () => {
     dispatch({ type: 'confirmReform' });
@@ -130,5 +213,5 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
     [dispatch],
   );
 
-  return { soumettre, confirmer, trancher };
+  return { soumettre, confirmer, trancher, clore };
 }

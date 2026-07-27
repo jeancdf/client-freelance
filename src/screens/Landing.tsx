@@ -118,7 +118,8 @@ export function Landing() {
 
           <div className="landing__faits">
             <p className="landing__fait">
-              <strong>Quinze minutes.</strong> Vous pouvez vous arrêter et reprendre : le lien vous
+              <strong>À votre rythme.</strong> Une question à la fois, et je ne rebondis que
+              quand ça change le chiffrage. Vous pouvez vous arrêter et reprendre : le lien vous
               ramène là où vous en étiez, depuis n'importe quel appareil.
             </p>
             <p className="landing__fait">
@@ -182,7 +183,7 @@ export function Landing() {
             </button>
 
             <p className="note landing__meta">
-              15 min environ · aucun compte · votre lien apparaît dans la barre d'adresse et vous
+              à votre rythme · aucun compte · votre lien apparaît dans la barre d'adresse et vous
               ramènera ici
             </p>
           </form>

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { POINTS } from '../../shared/points.ts';
 import type {
   CreationCadrage,
+  Echange,
   Maturite,
   Fichier,
   LigneCadrage,
@@ -49,6 +50,7 @@ interface LigneReponse {
   texte: string;
   confirme: number;
   arbitre: number;
+  clos: number;
   maj_le: string;
 }
 
@@ -89,8 +91,23 @@ export function parId(db: Base, id: string): LigneBase | undefined {
 
 function reponsesDe(db: Base, cadrageId: string): LigneReponse[] {
   return db
-    .prepare('SELECT point, texte, confirme, arbitre, maj_le FROM reponse WHERE cadrage_id = ? ORDER BY point')
+    .prepare(
+      'SELECT point, texte, confirme, arbitre, clos, maj_le FROM reponse WHERE cadrage_id = ? ORDER BY point',
+    )
     .all(cadrageId) as unknown as LigneReponse[];
+}
+
+/** Le fil de chaque point, dans l'ordre où les questions ont été posées. */
+export function echangesDe(db: Base, cadrageId: string): Record<string, Echange[]> {
+  const lignes = db
+    .prepare('SELECT point, question, reponse FROM echange WHERE cadrage_id = ? ORDER BY point, rang')
+    .all(cadrageId) as unknown as Array<{ point: number; question: string; reponse: string }>;
+
+  const par: Record<string, Echange[]> = {};
+  for (const ligne of lignes) {
+    (par[String(ligne.point)] ??= []).push({ question: ligne.question, reponse: ligne.reponse });
+  }
+  return par;
 }
 
 export function fichiersDe(db: Base, cadrageId: string): LigneFichier[] {
@@ -146,6 +163,7 @@ export function session(db: Base, ligne: LigneBase): Session {
       texte: r.texte,
       confirme: r.confirme === 1,
       arbitre: r.arbitre === 1,
+      clos: r.clos === 1,
       majLe: r.maj_le,
     };
   }
@@ -162,6 +180,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     statut: ligne.statut as Statut,
     maturite: ligne.maturite as Maturite | '',
     reponses,
+    echanges: echangesDe(db, ligne.id),
     fichiers: fichiersDe(db, ligne.id).map(versFichier),
     creeLe: ligne.cree_le,
     commenceLe: ligne.commence_le,
@@ -288,26 +307,158 @@ export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree:
 
   const now = maintenant();
   // Le drapeau `confirme` ne retombe jamais tout seul : une reformulation
-  // acceptée le reste tant que le client ne réécrit pas le point.
+  // acceptée le reste tant que le client ne réécrit pas le point. `clos` suit
+  // la même règle — un point refermé le reste jusqu'à ce qu'on le rouvre.
   db.prepare(
-    `INSERT INTO reponse (cadrage_id, point, texte, confirme, arbitre, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO reponse (cadrage_id, point, texte, confirme, arbitre, clos, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (cadrage_id, point) DO UPDATE SET
        texte    = excluded.texte,
        confirme = CASE WHEN reponse.texte = excluded.texte
                        THEN MAX(reponse.confirme, excluded.confirme)
                        ELSE excluded.confirme END,
        arbitre  = MAX(reponse.arbitre, excluded.arbitre),
+       clos     = MAX(reponse.clos, excluded.clos),
        maj_le   = excluded.maj_le`,
-  ).run(ligne.id, point, entree.texte, entree.confirme ? 1 : 0, entree.arbitre ? 1 : 0, now);
+  ).run(
+    ligne.id,
+    point,
+    entree.texte,
+    entree.confirme ? 1 : 0,
+    entree.arbitre ? 1 : 0,
+    entree.clore ? 1 : 0,
+    now,
+  );
 
   db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, ligne.id);
 
   const r = db
-    .prepare('SELECT point, texte, confirme, arbitre, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?')
+    .prepare(
+      'SELECT point, texte, confirme, arbitre, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
+    )
     .get(ligne.id, point) as unknown as LigneReponse;
 
-  return { texte: r.texte, confirme: r.confirme === 1, arbitre: r.arbitre === 1, majLe: r.maj_le };
+  return {
+    texte: r.texte,
+    confirme: r.confirme === 1,
+    arbitre: r.arbitre === 1,
+    clos: r.clos === 1,
+    majLe: r.maj_le,
+  };
+}
+
+/**
+ * Marque une réponse déjà écrite : relue et acceptée, ou arbitrage rendu. C'est
+ * une route à part de l'écriture du fil — sans quoi l'enregistrement de fond,
+ * qui repasse les drapeaux, réécrirait le premier échange du point.
+ */
+export function marquerReponse(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  drapeaux: { confirme?: boolean; arbitre?: boolean },
+): Reponse {
+  const now = maintenant();
+  // Monotone, comme à l'écriture : un accord ne se retire pas tout seul, il ne
+  // retombe qu'avec une réécriture du texte.
+  const res = db
+    .prepare(
+      `UPDATE reponse SET confirme = MAX(confirme, ?), arbitre = MAX(arbitre, ?), maj_le = ?
+       WHERE cadrage_id = ? AND point = ?`,
+    )
+    .run(drapeaux.confirme ? 1 : 0, drapeaux.arbitre ? 1 : 0, now, ligne.id, point);
+
+  if (res.changes === 0) throw new ErreurRequete(404, "Ce point n'a pas encore de réponse.");
+  db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, ligne.id);
+
+  const r = db
+    .prepare(
+      'SELECT point, texte, confirme, arbitre, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
+    )
+    .get(ligne.id, point) as unknown as LigneReponse;
+
+  return {
+    texte: r.texte,
+    confirme: r.confirme === 1,
+    arbitre: r.arbitre === 1,
+    clos: r.clos === 1,
+    majLe: r.maj_le,
+  };
+}
+
+/** Le plafond : trois questions par point, quoi qu'en dise le modèle. */
+export const RANG_MAX = 2;
+
+/**
+ * Écrit une réponse dans le fil d'un point, puis recompose la réponse retenue
+ * au dossier : les réponses du fil, dans l'ordre, une par ligne. Tout ce qui
+ * lit le dossier — récapitulatif, tableau de bord, analyse — continue de lire
+ * `reponse.texte` sans rien savoir du fil.
+ */
+export function ecrireEchange(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  rang: number,
+  question: string,
+  entree: PutReponse,
+): Reponse {
+  if (!Number.isInteger(point) || point < 0 || point >= POINTS.length) {
+    throw new ErreurRequete(404, 'point inconnu');
+  }
+  if (!Number.isInteger(rang) || rang < 0 || rang > RANG_MAX) {
+    throw new ErreurRequete(400, `rang doit être un entier entre 0 et ${RANG_MAX}`);
+  }
+  if (typeof entree.texte !== 'string' || !entree.texte.trim()) {
+    throw new ErreurRequete(400, 'La réponse ne peut pas être vide.');
+  }
+
+  const now = maintenant();
+  db.prepare(
+    `INSERT INTO echange (cadrage_id, point, rang, question, reponse, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (cadrage_id, point, rang) DO UPDATE SET
+       question = excluded.question, reponse = excluded.reponse, maj_le = excluded.maj_le`,
+  ).run(ligne.id, point, rang, question, entree.texte.trim(), now);
+
+  // Réécrire une question du fil rend caduc ce qui la suivait : les réponses
+  // d'après portaient sur des questions posées à partir d'un texte qui n'existe
+  // plus.
+  db.prepare('DELETE FROM echange WHERE cadrage_id = ? AND point = ? AND rang > ?').run(
+    ligne.id,
+    point,
+    rang,
+  );
+
+  const fil = db
+    .prepare('SELECT reponse FROM echange WHERE cadrage_id = ? AND point = ? ORDER BY rang')
+    .all(ligne.id, point) as unknown as Array<{ reponse: string }>;
+
+  return ecrireReponse(db, ligne, point, {
+    ...entree,
+    // Les questions posées mais pas encore répondues ne comptent pas.
+    texte: fil.map((e) => e.reponse).filter((r) => r.trim()).join('\n'),
+  });
+}
+
+/**
+ * Range une question de suite dès qu'elle est posée, sans réponse. Sans cela
+ * elle ne vivrait qu'en mémoire du navigateur : un client qui recharge en plein
+ * fil perdrait la question qu'il avait sous les yeux.
+ */
+export function poserQuestion(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  rang: number,
+  question: string,
+): void {
+  db.prepare(
+    `INSERT INTO echange (cadrage_id, point, rang, question, reponse, maj_le)
+     VALUES (?, ?, ?, ?, '', ?)
+     ON CONFLICT (cadrage_id, point, rang) DO UPDATE SET
+       question = excluded.question, maj_le = excluded.maj_le`,
+  ).run(ligne.id, point, rang, question, maintenant());
 }
 
 export function validerDossier(db: Base, ligne: LigneBase): LigneBase {
