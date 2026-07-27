@@ -1,11 +1,23 @@
 import { POINTS } from '../shared/points';
-import type { Aide, Client, Fichier, Mode, Ouverture, Session, Statut, Tension, Voie } from '../shared/api';
+import type {
+  Aide,
+  Client,
+  Fichier,
+  Maturite,
+  Mode,
+  Ouverture,
+  Session,
+  Statut,
+  Tension,
+  Voie,
+} from '../shared/api';
 
 export type { Mode, Voie };
 
 export type Screen =
   | 'landing'
   | 'accueil'
+  | 'depart'
   | 'entretien'
   | 'reform'
   | 'rapide'
@@ -26,6 +38,8 @@ export interface SessionMeta {
   token: string;
   client: Client;
   statut: Statut;
+  /** Où le client a dit en être ; vide tant qu'il n'a pas répondu. */
+  maturite: Maturite | '';
   creeLe: string;
   majLe: string;
   valideLe: string | null;
@@ -116,6 +130,7 @@ export const initialState: State = {
 export type Action =
   | { type: 'hydrate'; token: string; session: Session }
   | { type: 'ouverture'; point: number; ouverture: Ouverture }
+  | { type: 'depart'; maturite: Maturite }
   | { type: 'aide'; point: number; aide: Aide }
   | { type: 'occupe'; valeur: boolean }
   | {
@@ -266,9 +281,11 @@ function ecranDeReprise(session: Session, aDesReponses: boolean): Screen {
   if (session.statut === 'valide') return 'fin';
   if (aDesReponses || session.draft) return 'reprise';
   if (session.voie === 'rapide') return 'rapide';
-  // Celui qui est passé par la page publique a déjà lu de quoi il s'agit : le
-  // renvoyer sur l'accueil lui redemanderait de cliquer pour rien.
-  return session.commenceLe ? 'entretien' : 'accueil';
+  if (!session.commenceLe) return 'accueil';
+  // Celui qui est passé par la page publique a déjà lu de quoi il s'agit. Reste
+  // la question de départ, tant qu'il n'y a pas répondu : c'est elle qui règle
+  // le ton de tout l'entretien, on ne la saute pas.
+  return session.maturite ? 'entretien' : 'depart';
 }
 
 export function reducer(state: State, action: Action): State {
@@ -295,6 +312,7 @@ export function reducer(state: State, action: Action): State {
           token: action.token,
           client: s.client,
           statut: s.statut,
+          maturite: s.maturite,
           creeLe: s.creeLe,
           majLe: s.majLe,
           valideLe: s.valideLe,
@@ -323,6 +341,10 @@ export function reducer(state: State, action: Action): State {
 
     case 'ouverture':
       return { ...state, ouvertures: { ...state.ouvertures, [action.point]: action.ouverture } };
+
+    case 'depart':
+      if (!state.session) return state;
+      return { ...state, session: { ...state.session, maturite: action.maturite } };
 
     case 'aide':
       return { ...state, aide: { ...state.aide, [action.point]: action.aide } };

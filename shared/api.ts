@@ -81,6 +81,7 @@ export interface Session {
  *  que ce qui a bougé. */
 export interface PatchSession {
   mode?: Mode;
+  maturite?: Maturite;
   voie?: Voie;
   step?: number;
   draft?: string;
@@ -149,7 +150,6 @@ export interface Inscription {
   metier: string;
   demande: string;
   courriel: string;
-  maturite: Maturite;
 }
 
 // --------------------------------------------------- contenu généré ------ //

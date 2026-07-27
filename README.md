@@ -35,6 +35,7 @@ d'un client de démonstration en croyant que c'est le sien.
 | Écran | Fichier | Rôle |
 | --- | --- | --- |
 | Page publique | `src/screens/Landing.tsx` | Ce qu'est le cadrage, et le formulaire qui l'ouvre |
+| Point de départ | `src/screens/Depart.tsx` | Où en est le client : la question qui précède les huit points |
 | Accueil | `src/screens/Accueil.tsx` | Entrée du client invité, et les deux raccourcis |
 | Entretien | `src/screens/Entretien.tsx` | La question en cours, le sommaire, l'aide et l'arbitrage |
 | Reformulation | `src/screens/Reformulation.tsx` | « Si je comprends bien : … », à confirmer avant d'avancer |
@@ -71,15 +72,20 @@ d'un client de démonstration en croyant que c'est le sien.
 `POST /api/cadrage` est la seule route publique en écriture : elle crée le
 cadrage et rend le lien. C'est ce que fait le formulaire de `/`.
 
-Le visiteur y déclare **où il en est**, en trois choix. Ce n'est pas une case
-de convenance : la valeur part dans le contexte de chaque génération et change
-le ton des questions, et le troisième choix mène ailleurs.
+La première chose demandée n'est pas dans ce formulaire : **où le client en
+est** est la question qui ouvre l'entretien (`src/screens/Depart.tsx`), avant
+les huit points. C'est une question, pas un renseignement, et sa réponse part
+dans le contexte de chaque génération.
 
 | Choix | Ce que ça change |
 | --- | --- |
 | `idee` — sait ce qui le gêne, pas comment le régler | Questions ancrées dans son quotidien, aucune décision de fabrication à prendre, aucune forme présupposée |
 | `forme` — a une idée précise de ce qu'il veut | On peut parler parcours et écrans, en cherchant le pourquoi derrière ce qu'il imagine |
 | `specs` — a déjà un cahier des charges | Va directement au dépôt de document, et l'entretien cherche ce que le document tait |
+
+Elle est posée avant que le point I ne soit rédigé : son ouverture est mise en
+cache une fois pour toutes, la poser après la figerait sans elle. Un client qui
+revient sans y avoir répondu la retrouve.
 
 Elle est ouverte à tous, et chaque cadrage ouvre un entretien que le modèle
 facture. Deux bornes, dans `server/src/routes/inscription.ts` :

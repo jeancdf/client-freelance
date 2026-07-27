@@ -226,6 +226,7 @@ export function creationsDepuis(db: Base, ipEmpreinte: string, depuis: string): 
 
 const CHAMPS_PATCH = {
   mode: 'mode',
+  maturite: 'maturite',
   voie: 'voie',
   step: 'step',
   draft: 'draft',
@@ -240,6 +241,9 @@ function valider(patch: PatchSession): void {
   }
   if (patch.voie !== undefined && patch.voie !== 'entretien' && patch.voie !== 'rapide') {
     throw new ErreurRequete(400, 'voie inconnue');
+  }
+  if (patch.maturite !== undefined && !['idee', 'forme', 'specs'].includes(patch.maturite)) {
+    throw new ErreurRequete(400, 'point de départ inconnu');
   }
   if (patch.step !== undefined && (!Number.isInteger(patch.step) || patch.step < 0 || patch.step >= POINTS.length)) {
     throw new ErreurRequete(400, `step doit être un entier entre 0 et ${POINTS.length - 1}`);

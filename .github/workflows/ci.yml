@@ -1,17 +1,27 @@
-# Vérifications sur chaque poussée et chaque pull request.
-# Le déploiement rejoue ces mêmes étapes avant de toucher au VPS.
+# Pipeline unique :
+# 1. vérifier l'application et l'image Docker ;
+# 2. déployer sur le VPS uniquement après succès, pour main ou manuellement.
+#
+# Secrets requis pour le déploiement : VPS_HOST, VPS_USER,
+# VPS_SSH_PRIVATE_KEY.
+# Le fichier ~/client-freelance/shared/.env (CADRAGE_ADMIN_TOKEN) est copié
+# dans chaque release avant le démarrage ; il n'est jamais dans le dépôt.
 
-name: CI
+name: CI/CD
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+env:
+  APP_DIR: /home/deploy/client-freelance
+  SITE: https://client-contact.duckdns.org
+
 jobs:
-  verifier:
-    name: Types, tests, build
+  ci:
+    name: 1 - CI
     runs-on: ubuntu-latest
 
     steps:
@@ -35,20 +45,84 @@ jobs:
       - name: Build du front
         run: npm run build
 
-  image:
-    name: Build de l'image Docker
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
       # Construit l'image sans la pousser : une erreur de Dockerfile est vue
       # ici plutôt qu'au moment du déploiement sur le VPS.
       - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/build-push-action@v6
+      - name: Build de l'image Docker
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: 2 - Déploiement VPS
+    needs: ci
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: deploy-vps
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparer la connexion SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Préparer l'arborescence
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "mkdir -p '${APP_DIR}/releases' '${APP_DIR}/shared'"
+
+      - name: Envoyer la release
+        run: |
+          rsync -az --delete --exclude '.git' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${APP_DIR}/releases/${{ github.sha }}/"
+
+      - name: Activer la release et relancer la stack
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            APP_DIR="${APP_DIR}" RELEASE_SHA="${{ github.sha }}" 'bash -s' <<'EOF'
+          set -euo pipefail
+          RELEASE="$APP_DIR/releases/$RELEASE_SHA"
+
+          if [ ! -f "$APP_DIR/shared/.env" ]; then
+            echo "::error::$APP_DIR/shared/.env manquant (CADRAGE_ADMIN_TOKEN)." >&2
+            exit 1
+          fi
+          cp "$APP_DIR/shared/.env" "$RELEASE/.env"
+
+          ln -sfn "$RELEASE" "$APP_DIR/current"
+          cd "$APP_DIR/current"
+
+          docker compose -f docker-compose.prod.yml up -d --build
+          docker image prune -f
+
+          # Garder les cinq dernières releases.
+          ls -1dt "$APP_DIR"/releases/* | tail -n +6 | xargs -r rm -rf
+
+          docker compose -f docker-compose.prod.yml ps
+          EOF
+
+      - name: Vérifier que le site répond
+        run: |
+          for essai in 1 2 3 4 5 6; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "${SITE}/api/sante" || true)
+            if [ "$code" = "200" ]; then
+              echo "::notice::Déployé sur ${SITE}"
+              exit 0
+            fi
+            echo "Tentative $essai : HTTP $code — nouvel essai dans 10 s"
+            sleep 10
+          done
+          echo "::error::${SITE} ne répond pas après le déploiement."
+          exit 1

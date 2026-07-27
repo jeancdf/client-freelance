@@ -36,6 +36,24 @@ after(() => {
 
 const nouveau = (nom = 'Camille Dorval') => creer(db, { nom, metier: 'coach', demande: 'une appli' });
 
+describe('point de départ', () => {
+  it('s’enregistre par le patch, puisqu’il est demandé pendant l’entretien', () => {
+    const ligne = nouveau('Départ');
+    assert.equal(session(db, ligne).maturite, '');
+
+    const apres = appliquerPatch(db, ligne, { maturite: 'forme' });
+    assert.equal(session(db, apres).maturite, 'forme');
+  });
+
+  it('refuse un point de départ inventé', () => {
+    const ligne = nouveau('Départ refusé');
+    assert.throws(
+      () => appliquerPatch(db, ligne, { maturite: 'expert' as 'idee' }),
+      (erreur: unknown) => erreur instanceof ErreurRequete && erreur.code === 400,
+    );
+  });
+});
+
 describe('création', () => {
   it('rend un cadrage lisible par son jeton', () => {
     const ligne = nouveau();

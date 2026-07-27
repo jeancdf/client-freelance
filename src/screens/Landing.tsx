@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
 import { POINTS } from '../../shared/points';
-import type { Maturite } from '../../shared/api';
 import * as api from '../lib/api';
 
 /**
@@ -10,9 +9,10 @@ import * as api from '../lib/api';
  * jamais parlé à personne : il doit pouvoir ouvrir son cadrage lui-même, sinon
  * la page ne sert qu'à ceux qui ont déjà reçu un lien.
  *
- * Le formulaire envoie directement dans la première question : le visiteur a
- * déjà cliqué une fois, on ne lui redemande pas de cliquer sur son propre lien.
- * Celui-ci est posé dans la barre d'adresse, d'où il peut être mis en favori.
+ * Le formulaire envoie directement dans la première question, celle du point de
+ * départ : le visiteur a déjà cliqué une fois, on ne lui redemande pas de
+ * cliquer sur son propre lien. Celui-ci est posé dans la barre d'adresse, d'où
+ * il peut être mis en favori.
  */
 
 interface Champ {
@@ -49,35 +49,11 @@ const CHAMPS: Champ[] = [
   },
 ];
 
-/**
- * Où en est le visiteur. Ce n'est pas une case à cocher de convenance : elle
- * change les questions posées, et celui qui a déjà tout écrit va au dépôt de
- * document plutôt qu'à l'entretien.
- */
-const DEPARTS: Array<{ cle: Maturite; titre: string; corps: string }> = [
-  {
-    cle: 'idee',
-    titre: "Je sais ce qui me gêne, pas comment le régler",
-    corps: "Je pars de votre quotidien. Aucune question technique, jamais.",
-  },
-  {
-    cle: 'forme',
-    titre: "J'ai une idée assez précise de ce que je veux",
-    corps: "On parle du parcours et des écrans, et surtout du pourquoi.",
-  },
-  {
-    cle: 'specs',
-    titre: "J'ai déjà un cahier des charges",
-    corps: "Vous le déposez, je le lis, je ne demande que ce qui manque.",
-  },
-];
-
 const VIDE = { nom: '', courriel: '', metier: '', demande: '' };
 
 export function Landing() {
   const { dispatch } = useCadrage();
   const [valeurs, setValeurs] = useState(VIDE);
-  const [depart, setDepart] = useState<Maturite | ''>('');
   const [etat, setEtat] = useState<'repos' | 'envoi'>('repos');
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -92,15 +68,13 @@ export function Landing() {
     setEtat('envoi');
     setErreur(null);
     try {
-      const cree = await api.ouvrirCadrage({ ...valeurs, maturite: depart as Maturite });
+      const cree = await api.ouvrirCadrage(valeurs);
       window.history.replaceState(null, '', `/?c=${cree.token}`);
 
+      // `hydrate` choisit l'écran : un cadrage tout neuf ouvre sur la question
+      // de départ, qui réglera le ton de l'entretien.
       const session = await api.lireSession(cree.token);
       dispatch({ type: 'hydrate', token: cree.token, session });
-      // Celui qui a déjà tout écrit dépose son document ; les autres entrent
-      // dans l'entretien.
-      if (depart === 'specs') dispatch({ type: 'goScreen', screen: 'rapide' });
-      else dispatch({ type: 'start', mode: 'long' });
     } catch (cause) {
       setErreur(cause instanceof Error ? cause.message : 'Impossible pour le moment.');
       setEtat('repos');
@@ -161,7 +135,7 @@ export function Landing() {
         <aside className="landing__aside">
           <form className="landing__form" onSubmit={(e) => void ouvrir(e)}>
             <p className="lbl landing__form-kicker">Commencer</p>
-            <h2 className="serif landing__form-title">Quelques champs, puis on y va.</h2>
+            <h2 className="serif landing__form-title">Quatre champs, puis on y va.</h2>
 
             {CHAMPS.map((champ) => (
               <div key={champ.cle} className="landing__champ">
@@ -193,36 +167,6 @@ export function Landing() {
               </div>
             ))}
 
-            {/* Le point de départ décide du ton des questions, et envoie au
-                dépôt de document celui qui a déjà tout écrit. */}
-            <fieldset className="landing__depart">
-              <legend className="landing__label landing__depart-legend">Où vous en êtes</legend>
-              {DEPARTS.map((choix) => (
-                <label
-                  key={choix.cle}
-                  className={
-                    depart === choix.cle
-                      ? 'landing__depart-option landing__depart-option--choisi'
-                      : 'landing__depart-option'
-                  }
-                >
-                  <input
-                    type="radio"
-                    name="depart"
-                    required
-                    className="landing__depart-radio"
-                    value={choix.cle}
-                    checked={depart === choix.cle}
-                    onChange={() => setDepart(choix.cle)}
-                  />
-                  <span className="landing__depart-texte">
-                    <span className="landing__depart-titre">{choix.titre}</span>
-                    <span className="landing__depart-corps">{choix.corps}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-
             {erreur && (
               <p className="landing__erreur" role="alert">
                 {erreur}
@@ -234,11 +178,7 @@ export function Landing() {
               className="btn btn--primary landing__submit"
               disabled={etat === 'envoi'}
             >
-              {etat === 'envoi'
-                ? 'J’ouvre votre dossier…'
-                : depart === 'specs'
-                  ? 'Déposer mon document'
-                  : 'Commencer l’entretien'}
+              {etat === 'envoi' ? 'J’ouvre votre dossier…' : 'Commencer'}
             </button>
 
             <p className="note landing__meta">

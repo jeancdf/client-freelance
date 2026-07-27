@@ -636,60 +636,78 @@ textarea.landing__input {
   text-align: center;
 }
 
-/* Le point de départ : trois blocs cliquables, pas trois puces perdues. */
-.landing__depart {
-  border: none;
-  padding: 0;
-  margin: 0 0 20px;
+/* --------------------------------------------------------------- départ -- */
+
+/* La question qui précède les huit points. Même mise en page que la
+   reformulation : une question, rien d'autre à l'écran. */
+.depart__body {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: clamp(48px, 12vh, 120px) var(--pad) 0;
+  animation: rise 0.5s ease-out both;
+}
+
+.depart__kicker {
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
+  margin: 0 0 22px;
+}
+
+.depart__title {
+  font-size: var(--qsize);
+  line-height: 1.14;
+  letter-spacing: -0.015em;
+  margin: 0 0 18px;
+}
+
+.depart__lead {
+  font-size: var(--lead);
+  line-height: 1.6;
+  color: var(--ink-70);
+  margin: 0 0 32px;
+  max-width: 52ch;
+}
+
+.depart__choix {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
-.landing__depart-legend {
-  padding: 0;
-  margin-bottom: 8px;
-}
-
-.landing__depart-option {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
+.depart__option {
+  display: grid;
+  gap: 4px;
+  text-align: left;
   border: 1px solid var(--rule);
-  background: var(--paper);
+  background: var(--paper-2);
+  color: inherit;
   border-radius: 2px;
-  padding: 11px 12px;
+  padding: 16px 18px;
   cursor: pointer;
 }
 
-.landing__depart-option:hover {
-  border-color: var(--ink-45);
+.depart__option:hover:not(:disabled) {
+  border-color: var(--ink);
 }
 
-.landing__depart-option--choisi {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+.depart__option:disabled {
+  cursor: default;
 }
 
-.landing__depart-radio {
-  margin: 3px 0 0;
-  accent-color: var(--accent);
-  flex: none;
-}
-
-.landing__depart-texte {
-  display: grid;
-  gap: 2px;
-}
-
-.landing__depart-titre {
-  font-size: 14.5px;
+.depart__option-titre {
+  font-size: 17px;
   line-height: 1.35;
 }
 
-.landing__depart-corps {
-  font-size: 12.5px;
-  line-height: 1.45;
+.depart__option-corps {
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--ink-70);
+}
+
+.depart__note {
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  margin: 28px 0 0;
 }
 
 /* -------------------------------------------------------------- reprise -- */

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { CadrageCree, Inscription, Maturite } from '../../../shared/api.ts';
+import type { CadrageCree, Inscription } from '../../../shared/api.ts';
 import { config } from '../config.ts';
 import type { Base } from '../db.ts';
 import { ErreurRequete, creationsDepuis, creer } from '../repo.ts';
@@ -25,7 +25,6 @@ const JOUR_MS = 24 * HEURE_MS;
 /** Assez pour rejeter une adresse manifestement fausse, pas plus. */
 const COURRIEL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-const MATURITES: Maturite[] = ['idee', 'forme', 'specs'];
 
 interface Champ {
   cle: keyof Inscription;
@@ -59,12 +58,7 @@ function lire(corps: Partial<Inscription> | undefined): Inscription {
     throw new ErreurRequete(400, "Cette adresse ne ressemble pas à une adresse électronique.");
   }
 
-  const maturite = (corps?.maturite ?? '') as Maturite;
-  if (!MATURITES.includes(maturite)) {
-    throw new ErreurRequete(400, 'Dites-moi où vous en êtes : cochez une des trois réponses.');
-  }
-
-  return { ...propre, maturite } as unknown as Inscription;
+  return propre as unknown as Inscription;
 }
 
 export function routesInscription(app: FastifyInstance, db: Base, sel: string): void {
@@ -101,18 +95,10 @@ export function routesInscription(app: FastifyInstance, db: Base, sel: string): 
       { nom: entree.nom, metier: entree.metier, demande: entree.demande },
       // Le formulaire enchaîne sur la première question : ce cadrage est
       // commencé dès sa création, il ne montrera pas la page d'accueil.
-      {
-        courriel: entree.courriel,
-        ipEmpreinte: empreinte,
-        dejaEntre: true,
-        maturite: entree.maturite,
-      },
+      { courriel: entree.courriel, ipEmpreinte: empreinte, dejaEntre: true },
     );
 
-    app.log.info(
-      { cadrage: ligne.id, metier: entree.metier, maturite: entree.maturite },
-      'cadrage ouvert en libre-service',
-    );
+    app.log.info({ cadrage: ligne.id, metier: entree.metier }, 'cadrage ouvert en libre-service');
 
     reply.code(201);
     return {

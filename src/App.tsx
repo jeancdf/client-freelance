@@ -16,6 +16,7 @@ import { useEntretien } from './useEntretien';
 import { PlanNav } from './components/PlanNav';
 import { Landing } from './screens/Landing';
 import { Accueil } from './screens/Accueil';
+import { Depart } from './screens/Depart';
 import { Reprise } from './screens/Reprise';
 import { Entretien } from './screens/Entretien';
 import { Reformulation } from './screens/Reformulation';
@@ -38,6 +39,7 @@ export interface CadrageProps {
 const SCREENS: Record<Screen, ComponentType> = {
   landing: Landing,
   accueil: Accueil,
+  depart: Depart,
   reprise: Reprise,
   entretien: Entretien,
   reform: Reformulation,
