@@ -7,7 +7,6 @@ import { POINTS } from '../../shared/points.ts';
 import { ouvrirBase, type Base } from './db.ts';
 import {
   ErreurRequete,
-  RANG_MAX,
   appliquerPatch,
   creer,
   ecrireEchange,
@@ -98,10 +97,25 @@ describe('le fil d’un point', () => {
     );
   });
 
-  it('refuse un rang au-delà du plafond', () => {
-    const ligne = nouveau('Plafond');
+  it('accepte autant de questions que le point en demande', () => {
+    const ligne = nouveau('Fil long');
+    for (let rang = 0; rang < 7; rang++) {
+      ecrireEchange(db, ligne, 3, rang, `Question ${rang + 1} ?`, {
+        texte: `Réponse ${rang + 1}.`,
+      });
+    }
+
+    assert.equal(session(db, ligne).echanges['3'].length, 7);
+  });
+
+  it('refuse seulement un rang invalide', () => {
+    const ligne = nouveau('Rang invalide');
     assert.throws(
-      () => ecrireEchange(db, ligne, 3, RANG_MAX + 1, 'Une question de trop ?', { texte: 'Non.' }),
+      () => ecrireEchange(db, ligne, 3, -1, 'Une question invalide ?', { texte: 'Non.' }),
+      (erreur: unknown) => erreur instanceof ErreurRequete && erreur.code === 400,
+    );
+    assert.throws(
+      () => ecrireEchange(db, ligne, 3, 1.5, 'Une question invalide ?', { texte: 'Non.' }),
       (erreur: unknown) => erreur instanceof ErreurRequete && erreur.code === 400,
     );
   });
@@ -269,6 +283,21 @@ describe('tableau du prestataire', () => {
     const [row] = lister(seule).cadrages;
     assert.equal(row.couverture, 2);
     assert.equal(row.enCours, 1, 'le point I et le III sont écrits, le II manque');
+    seule.close();
+  });
+
+  it('considère le dossier complet sans réponse hors périmètre quand ce point est inutile', () => {
+    const seule = baseIsolee();
+    const ligne = creer(seule, { nom: 'Camille sans hors-périmètre' });
+    for (const point of [0, 1, 2, 3, 4, 6, 7]) {
+      ecrireReponse(seule, parId(seule, ligne.id)!, point, {
+        texte: `réponse ${point}`,
+      });
+    }
+
+    const [row] = lister(seule).cadrages;
+    assert.equal(row.couverture, POINTS.length);
+    assert.equal(row.enCours, null);
     seule.close();
   });
 

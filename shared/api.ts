@@ -5,6 +5,9 @@
 
 export type Mode = 'long' | 'court';
 
+/** Nombre de réponses exigées avant que l'IA puisse clore un point seule. */
+export const QUESTIONS_MIN_PAR_POINT = 2;
+
 /** Par où le client est passé : l'entretien complet, ou le dépôt de document. */
 export type Voie = 'entretien' | 'rapide';
 
@@ -96,6 +99,8 @@ export interface Session {
    */
   reformulations: Record<string, string>;
   deductions: Record<string, string>;
+  /** `null` tant que le périmètre n'a pas encore été évalué. */
+  horsPerimetre: DecisionHorsPerimetre | null;
 }
 
 /** Champs modifiables au fil de la saisie. Tout est optionnel : on n'envoie
@@ -143,7 +148,7 @@ export interface LigneCadrage {
 
 export interface StatsCadrages {
   total: number;
-  /** Part moyenne des huit points renseignés, en pourcentage. */
+  /** Part moyenne des huit points possibles couverts, point ignoré compris. */
   tauxAchevement: number;
   /** Médiane des durées des cadrages validés, en millisecondes. */
   dureeMedianeMs: number;
@@ -200,6 +205,14 @@ export interface Tension {
   optionB: string;
 }
 
+/** Décision ciblée qui rend le point « Hors périmètre » conditionnel. */
+export interface DecisionHorsPerimetre {
+  /** Vrai uniquement si le client a explicitement évoqué un besoin supplémentaire. */
+  afficher: boolean;
+  /** Le besoin relevé dans ses mots ; vide quand le point doit être ignoré. */
+  besoin: string;
+}
+
 /**
  * L'ouverture d'un point : la question telle qu'elle est posée à CE client, sa
  * relance, et les réponses probables. Les trois sortent du même appel — la
@@ -229,7 +242,7 @@ export interface SuiteReponse {
    * ils porteraient sur une réponse encore en cours d'écriture.
    */
   suite: Ouverture | null;
-  /** Rang de `suite` dans le fil (1 ou 2), `-1` quand le point est clos. */
+  /** Rang de `suite` dans le fil, `-1` quand le point est clos. */
   rang: number;
   /** `null` si le point n'appelle pas de reformulation, ou n'est pas clos. */
   reformulation: string | null;
@@ -237,6 +250,8 @@ export interface SuiteReponse {
   tension: Tension | null;
   /** Ce qui a été déduit sans le demander, s'il y a lieu. */
   deduction: string | null;
+  /** Décision prise à la clôture du périmètre ; `null` sur les autres points. */
+  horsPerimetre: DecisionHorsPerimetre | null;
 }
 
 export interface PointAnalyse {
@@ -259,6 +274,8 @@ export interface AnalyseGeneree extends Analyse {
   origine: Origine;
   /** Vrai si des fichiers n'ont pas pu être lus (PDF, Word). */
   fichiersIllisibles: string[];
+  /** Même décision conditionnelle que dans l'entretien guidé. */
+  horsPerimetre: DecisionHorsPerimetre;
 }
 
 export interface CadrageCree {

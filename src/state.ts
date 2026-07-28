@@ -1,8 +1,14 @@
-import { POINTS } from '../shared/points';
+import {
+  INDEX_HORS_PERIMETRE,
+  POINTS,
+  relanceDePrecision,
+} from '../shared/points';
+import { QUESTIONS_MIN_PAR_POINT } from '../shared/api';
 import type {
   Aide,
   Choix,
   Client,
+  DecisionHorsPerimetre,
   Echange,
   Fichier,
   Maturite,
@@ -73,10 +79,12 @@ export interface State {
   lien1: string;
   lien2: string;
   session: SessionMeta | null;
+  /** Décision qui fait exister, ou non, le point VI dans ce dossier. */
+  horsPerimetre: DecisionHorsPerimetre | null;
 
   /**
-   * Les questions écrites pour ce client, par « point:rang » — un point porte
-   * jusqu'à trois questions, chacune tirée de la réponse précédente.
+   * Les questions écrites pour ce client, par « point:rang » — chaque nouvelle
+   * question est tirée de la réponse précédente, sans plafond arbitraire.
    * Absente tant que le serveur n'a pas répondu : l'écran attend plutôt que
    * d'afficher la formulation de référence.
    */
@@ -127,6 +135,7 @@ export const initialState: State = {
   lien1: 'https://camilledorval.fr',
   lien2: '',
   session: null,
+  horsPerimetre: null,
   ouvertures: {},
   echanges: {},
   rang: 0,
@@ -144,6 +153,7 @@ export type Action =
   | { type: 'ouverture'; point: number; rang: number; ouverture: Ouverture }
   | { type: 'depart'; maturite: Maturite }
   | { type: 'aide'; point: number; aide: Aide }
+  | { type: 'horsPerimetre'; decision: DecisionHorsPerimetre }
   | { type: 'occupe'; valeur: boolean }
   | {
       type: 'suite';
@@ -157,6 +167,7 @@ export type Action =
       reformulation: string | null;
       tension: Tension | null;
       deduction: string | null;
+      horsPerimetre: DecisionHorsPerimetre | null;
     }
   | { type: 'fichiers'; fichiers: Fichier[] }
   | { type: 'dossierValide'; valideLe: string; dureeMs: number }
@@ -202,7 +213,7 @@ export function ouvertureOf(state: State, index: number, rang = state.rang): Ouv
       question: point.q,
       relance: point.hint,
       propositions: point.props,
-      choix: 'unique' as Choix,
+      choix: point.selection ? ('multiple' as Choix) : ('unique' as Choix),
     }
   );
 }
@@ -214,16 +225,32 @@ export function answerOf(state: State, index: number): string {
 
 /** L'index du point en cours, borné au dernier point. */
 export function currentIndex(state: State): number {
-  return Math.min(state.step, LAST);
+  const index = Math.min(state.step, LAST);
+  if (
+    index === INDEX_HORS_PERIMETRE &&
+    state.horsPerimetre?.afficher !== true &&
+    (state.horsPerimetre !== null ||
+      state.answers[INDEX_HORS_PERIMETRE] === undefined)
+  ) {
+    return Math.min(INDEX_HORS_PERIMETRE + 1, LAST);
+  }
+  return index;
+}
+
+/** Les points qui existent dans ce dossier, hors point conditionnel inutile. */
+export function indicesPointsVisibles(state: State): number[] {
+  const afficherHorsPerimetre =
+    state.horsPerimetre?.afficher ??
+    state.answers[INDEX_HORS_PERIMETRE] !== undefined;
+  return POINTS.map((_, index) => index).filter(
+    (index) => index !== INDEX_HORS_PERIMETRE || afficherHorsPerimetre,
+  );
 }
 
 /** Les points effectivement écrits, dans l'ordre. */
 export function pointsEcrits(state: State): number[] {
-  return POINTS.map((_, k) => k).filter((k) => state.answers[k] !== undefined);
+  return indicesPointsVisibles(state).filter((k) => state.answers[k] !== undefined);
 }
-
-/** Le plafond de questions par point, tenu aussi côté serveur. */
-const RANG_MAX = 2;
 
 /**
  * Le point sur lequel on reprend l'entretien : un fil laissé ouvert d'abord,
@@ -231,11 +258,14 @@ const RANG_MAX = 2;
  * bouton doit y mener — d'où un seul calcul, partagé.
  */
 export function pointDeReprise(state: State): number {
-  const ouvert = POINTS.findIndex((_, k) => state.answers[k] !== undefined && !state.clos[k]);
-  if (ouvert !== -1) return ouvert;
+  const visibles = indicesPointsVisibles(state);
+  const ouvert = visibles.find(
+    (k) => state.answers[k] !== undefined && !state.clos[k],
+  );
+  if (ouvert !== undefined) return ouvert;
 
-  const manquant = POINTS.findIndex((_, k) => state.answers[k] === undefined);
-  return manquant === -1 ? LAST : manquant;
+  const manquant = visibles.find((k) => state.answers[k] === undefined);
+  return manquant ?? visibles[visibles.length - 1] ?? LAST;
 }
 
 /**
@@ -245,7 +275,7 @@ export function pointDeReprise(state: State): number {
 function rangEnCours(fil: Echange[], clos?: boolean, reponse?: string): number {
   if (clos || reponse === undefined) return 0;
   const attente = fil.findIndex((e) => !e.reponse.trim());
-  return attente === -1 ? Math.min(fil.length, RANG_MAX) : attente;
+  return attente === -1 ? fil.length : attente;
 }
 
 /**
@@ -272,6 +302,7 @@ function demoAnswers(upTo: number): Pick<State, 'answers' | 'confirmed'> {
   const answers: Record<number, string> = {};
   const confirmed: Record<number, boolean> = {};
   for (let i = 0; i < upTo; i++) {
+    if (i === INDEX_HORS_PERIMETRE) continue;
     answers[i] = POINTS[i].props[0];
     if (POINTS[i].reform) confirmed[i] = true;
   }
@@ -279,11 +310,16 @@ function demoAnswers(upTo: number): Pick<State, 'answers' | 'confirmed'> {
 }
 
 function goStep(state: State, step: number, extra: Partial<State> = {}): State {
-  const rang = rangDeReprise(state, step);
+  const visible = indicesPointsVisibles(state);
+  const cible =
+    step === INDEX_HORS_PERIMETRE && !visible.includes(step)
+      ? (visible.find((index) => index > step) ?? visible[visible.length - 1] ?? LAST)
+      : step;
+  const rang = rangDeReprise(state, cible);
   return {
     ...state,
     screen: 'entretien',
-    step,
+    step: cible,
     rang,
     help: false,
     tension: false,
@@ -293,14 +329,15 @@ function goStep(state: State, step: number, extra: Partial<State> = {}): State {
     dossierOpen: false,
     // Un fil en cours attend une nouvelle réponse ; un point clos qu'on rouvre
     // rend ses mots au client pour qu'il les corrige.
-    draft: rang > 0 ? '' : (state.answers[step] ?? ''),
+    draft: rang > 0 ? '' : (state.answers[cible] ?? ''),
     scrollTick: state.scrollTick + 1,
     ...extra,
   };
 }
 
 function advance(state: State, from: number): State {
-  if (from >= LAST) {
+  const prochain = indicesPointsVisibles(state).find((index) => index > from);
+  if (prochain === undefined) {
     return {
       ...state,
       screen: 'recap',
@@ -309,7 +346,7 @@ function advance(state: State, from: number): State {
       scrollTick: state.scrollTick + 1,
     };
   }
-  return goStep(state, from + 1);
+  return goStep(state, prochain);
 }
 
 function goScreen(state: State, screen: Screen, extra: Partial<State> = {}): State {
@@ -388,6 +425,7 @@ export function reducer(state: State, action: Action): State {
           dureeMs: s.dureeMs,
           fichiers: s.fichiers,
         },
+        horsPerimetre: s.horsPerimetre,
         mode: s.mode,
         voie: s.voie,
         step: s.step,
@@ -428,6 +466,9 @@ export function reducer(state: State, action: Action): State {
     case 'aide':
       return { ...state, aide: { ...state.aide, [action.point]: action.aide } };
 
+    case 'horsPerimetre':
+      return { ...state, horsPerimetre: action.decision };
+
     case 'occupe':
       return { ...state, occupe: action.valeur };
 
@@ -457,7 +498,6 @@ export function reducer(state: State, action: Action): State {
           rang: action.rang,
           draft: '',
           occupe: false,
-          scrollTick: state.scrollTick + 1,
         };
       }
 
@@ -475,6 +515,7 @@ export function reducer(state: State, action: Action): State {
         reformulations: action.reformulation
           ? { ...state.reformulations, [point]: action.reformulation }
           : state.reformulations,
+        horsPerimetre: action.horsPerimetre ?? state.horsPerimetre,
         occupe: false,
       };
 
@@ -522,6 +563,7 @@ export function reducer(state: State, action: Action): State {
         tensionResolved: {},
         clos: {},
         echanges: {},
+        horsPerimetre: null,
         dossierOpen: false,
       });
 
@@ -537,6 +579,7 @@ export function reducer(state: State, action: Action): State {
         tensionResolved: {},
         clos: {},
         echanges: {},
+        horsPerimetre: null,
         dossierOpen: false,
       });
 
@@ -557,21 +600,70 @@ export function reducer(state: State, action: Action): State {
 
       const point = POINTS[i];
       const text = state.draft.trim() || point.props[0];
-      const answers = { ...state.answers, [i]: text };
+      const posee = ouvertureOf(state, i).question;
+      const fil = [
+        ...(state.echanges[i] ?? []).slice(0, state.rang),
+        { question: posee, reponse: text },
+      ];
+      const answers = {
+        ...state.answers,
+        [i]: fil.map((echange) => echange.reponse).join('\n'),
+      };
+
+      // La démonstration suit le même rythme qu'un dossier réel : au moins
+      // deux questions, puis elle ferme faute de modèle pour décider d'une
+      // relance supplémentaire.
+      if (state.rang + 1 < QUESTIONS_MIN_PAR_POINT) {
+        const rang = state.rang + 1;
+        const suivante = relanceDePrecision(
+          point,
+          fil.map((echange) => echange.reponse),
+        );
+        return {
+          ...state,
+          answers,
+          echanges: {
+            ...state.echanges,
+            [i]: [...fil, { question: suivante.question, reponse: '' }],
+          },
+          ouvertures: {
+            ...state.ouvertures,
+            [cleOuverture(i, rang)]: suivante,
+          },
+          rang,
+          draft: '',
+        };
+      }
 
       // La réponse contredit un point déjà noté : on demande l'arbitrage avant
       // d'avancer, et une seule fois — une fois tranché, on n'y revient pas.
       const raisesTension =
         point.tensionOn !== undefined &&
-        text === point.props[point.tensionOn] &&
+        fil.some((echange) =>
+          echange.reponse
+            .split('\n')
+            .some((ligne) => ligne.trim() === point.props[point.tensionOn!]),
+        ) &&
         !state.tension &&
         !state.tensionResolved[i];
 
       if (raisesTension) {
-        return { ...state, answers, tension: true, scrollTick: state.scrollTick + 1 };
+        return {
+          ...state,
+          answers,
+          echanges: { ...state.echanges, [i]: fil },
+          clos: { ...state.clos, [i]: true },
+          tension: true,
+          scrollTick: state.scrollTick + 1,
+        };
       }
 
-      const answered = { ...state, answers };
+      const answered = {
+        ...state,
+        answers,
+        echanges: { ...state.echanges, [i]: fil },
+        clos: { ...state.clos, [i]: true },
+      };
       if (point.reform && state.mode === 'long') {
         return goScreen(answered, 'reform');
       }
@@ -594,6 +686,8 @@ export function reducer(state: State, action: Action): State {
 
       const lignes = state.draft.split('\n').filter((l) => l.trim());
       const deja = lignes.indexOf(action.text);
+      const selection = state.rang === 0 ? POINTS[i].selection : undefined;
+      if (deja === -1 && selection && lignes.length >= selection.max) return state;
       const suivantes = deja === -1 ? [...lignes, action.text] : lignes.filter((_, k) => k !== deja);
       return { ...state, draft: suivantes.join('\n') };
     }
@@ -699,7 +793,7 @@ export function reducer(state: State, action: Action): State {
       const demo = demoAnswers(5);
       return goScreen(state, 'entretien', {
         mode: 'court',
-        step: 5,
+        step: INDEX_HORS_PERIMETRE + 1,
         draft: '',
         answers: demo.answers,
         confirmed: demo.confirmed,

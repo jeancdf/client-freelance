@@ -1,5 +1,5 @@
 /**
- * Les huit points du cadrage.
+ * Les huit points possibles du cadrage, dont le point VI conditionnel.
  *
  * Contenu repris tel quel de la maquette `Cadrage.dc.html` : c'est le script de
  * l'entretien, pas de la donnée de démonstration. Toute retouche ici change ce
@@ -36,6 +36,14 @@ export interface Point {
   hint: string;
   /** Réponses probables proposées ; la première sert aussi de réponse par défaut. */
   props: string[];
+  /** Force une sélection multiple bornée sur la première question du point. */
+  selection?: { min: number; max: number };
+  /** La première réponse doit être suivie d'un classement explicite. */
+  priorisation?: boolean;
+  /** Ce point n'existe que si une décision préalable l'a rendu utile. */
+  conditionnel?: boolean;
+  /** Le premier tour prend la forme d'un formulaire structuré. */
+  configurateur?: 'contraintes';
   /** Reformulation soumise à confirmation avant d'avancer (mode long). */
   reform?: string;
   /** Ce qui est déduit sans question supplémentaire. */
@@ -45,6 +53,143 @@ export interface Point {
   /** Index dans `props` de la réponse qui déclenche l'arbitrage. */
   tensionOn?: number;
   help: Help;
+}
+
+export const INDEX_PERIMETRE = 4;
+export const INDEX_HORS_PERIMETRE = 5;
+export const INDEX_CONTRAINTES = 6;
+
+export interface ConfigurationContraintes {
+  delai: string;
+  budget: string;
+  technologies: string;
+}
+
+const LIBELLES_CONTRAINTES: Record<keyof ConfigurationContraintes, string> = {
+  delai: 'Délai',
+  budget: 'Budget',
+  technologies: 'Demandes technologiques',
+};
+
+/** Transforme les champs du configurateur en réponse lisible partout ailleurs. */
+export function serialiserContraintes(
+  configuration: ConfigurationContraintes,
+): string {
+  return (Object.keys(LIBELLES_CONTRAINTES) as Array<
+    keyof ConfigurationContraintes
+  >)
+    .map((champ) => {
+      // Ne pas rogner ici : cette fonction tourne à chaque frappe. Supprimer
+      // l'espace final empêcherait tout simplement de saisir plusieurs mots.
+      const valeur = configuration[champ].replace(/\r?\n/g, ' ');
+      return `${LIBELLES_CONTRAINTES[champ]} : ${valeur}`;
+    })
+    .join('\n');
+}
+
+/** Relit aussi une saisie en cours après rechargement ou réouverture du point. */
+export function lireContraintes(texte: string): ConfigurationContraintes {
+  const configuration: ConfigurationContraintes = {
+    delai: '',
+    budget: '',
+    technologies: '',
+  };
+  let trouve = false;
+
+  for (const ligne of texte.split('\n')) {
+    for (const champ of Object.keys(LIBELLES_CONTRAINTES) as Array<
+      keyof ConfigurationContraintes
+    >) {
+      const prefixe = `${LIBELLES_CONTRAINTES[champ]} :`;
+      if (!ligne.startsWith(prefixe)) continue;
+      configuration[champ] = ligne.slice(prefixe.length).trimStart();
+      trouve = true;
+    }
+  }
+
+  // Un ancien dossier peut contenir une réponse libre à cet endroit. On la
+  // conserve dans le champ le plus large au lieu de la faire disparaître.
+  if (!trouve && texte.trim()) configuration.technologies = texte.trim();
+  return configuration;
+}
+
+/**
+ * Deuxième question de secours quand aucun modèle n'est disponible. En temps
+ * normal, l'IA écrit une relance directement à partir de la première réponse.
+ */
+export function relanceDePrecision(point: Point, reponses: string[] = []) {
+  if (point.priorisation) {
+    const elements = reponses
+      .flatMap((reponse) => reponse.split('\n'))
+      .map((element) => element.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    while (elements.length < 3) elements.push('…');
+
+    const labels = [
+      'Priorité 1 — à traiter en premier',
+      'Priorité 2 — à traiter ensuite',
+      'Priorité 3 — cruciale pour le projet',
+    ];
+    const ordre = (indices: number[]) =>
+      indices.map((index, rang) => `${labels[rang]} : ${elements[index]}`).join('\n');
+
+    return {
+      question: 'Quel label de priorité attribuez-vous à chacun de ces trois éléments ?',
+      relance:
+        "Classez-les de 1 à 3. Le troisième reste crucial : ce classement fixe l'ordre d'attention, pas ce qui serait facultatif.",
+      propositions: [
+        ordre([0, 1, 2]),
+        ordre([1, 0, 2]),
+        ordre([2, 0, 1]),
+      ],
+      choix: 'unique' as const,
+    };
+  }
+
+  if (point.conditionnel) {
+    return {
+      question:
+        'Quelle conséquence cette décision doit-elle avoir sur la première version ?',
+      relance:
+        'Dites si son contenu change maintenant, si une extension future doit seulement rester possible, ou si rien ne doit être prévu.',
+      propositions: [
+        'Le contenu de la première version change maintenant, et le budget doit être revu.',
+        "La première version ne change pas, mais il faut préserver la possibilité de l'ajouter plus tard.",
+        'Rien ne doit être prévu : ce besoin reste complètement écarté.',
+      ],
+      choix: 'unique' as const,
+    };
+  }
+
+  if (point.configurateur === 'contraintes') {
+    return {
+      question:
+        "Existe-t-il d'autres contraintes non classiques que ce configurateur n'a pas couvertes ?",
+      relance:
+        "Par exemple une validation interne, une règle métier ou légale, une dépendance extérieure, une exigence d'accessibilité ou une personne à convaincre.",
+      propositions: [
+        "Non, je ne vois pas d'autre contrainte à ajouter.",
+        'Une validation interne ou une personne précise peut bloquer la décision.',
+        'Une règle métier, légale ou de sécurité particulière doit être respectée.',
+        "Le projet dépend d'un prestataire, d'une autorisation ou d'un calendrier extérieur.",
+      ],
+      choix: 'unique' as const,
+    };
+  }
+
+  return {
+    question:
+      "Qu'est-ce qui rend votre réponse concrète dans votre quotidien : un exemple, un nombre ou une contrainte ?",
+    relance:
+      'Choisissez une piste pour commencer, puis remplacez les points de suspension par vos mots.',
+    propositions: [
+      'Je peux donner un exemple récent : …',
+      "L'ordre de grandeur à retenir est : …",
+      'La contrainte la plus importante est : …',
+    ],
+    choix: 'unique' as const,
+  };
 }
 
 export const POINTS: Point[] = [
@@ -136,19 +281,23 @@ export const POINTS: Point[] = [
   {
     num: 'V', label: 'Le périmètre',
     intention:
-      "la seule chose sans laquelle le projet ne sert à rien : le cœur, pas la liste complète.",
-    q: "Si on ne construisait qu'une seule chose, celle sans laquelle ça ne sert à rien, laquelle ?",
-    hint: "On ajoutera le reste ensuite. Je cherche le cœur, pas la liste complète.",
+      "les trois éléments principaux sans lesquels le projet ne remplit pas son rôle, puis leur ordre de priorité explicite sans rendre le troisième facultatif.",
+    q: 'Quelles sont les trois choses principales que le projet doit absolument permettre ?',
+    hint:
+      'Citez-en exactement trois, une par ligne. Vous les prioriserez juste après ; même la troisième restera cruciale pour le projet.',
     props: [
       "Créer des programmes réutilisables et les adapter par client sans tout réécrire.",
       "Que le client voie sa séance du jour sur son téléphone, sans compte à créer.",
       "Que je sache qui a fait sa séance et qui ne l'a pas faite.",
       "Que chacun saisisse ses charges à chaque série, pour suivre sa progression."
     ],
+    selection: { min: 3, max: 3 },
+    priorisation: true,
     tensionOn: 3,
-    reform: "le cœur du projet est la création de programmes réutilisables et adaptables par client ; la consultation de la séance du jour sur téléphone vient juste après, sans création de compte.",
+    reform:
+      "vos trois priorités sont toutes cruciales : d'abord créer des programmes réutilisables et adaptables, ensuite permettre leur consultation sur téléphone, puis suivre les séances réalisées ; leur classement fixe l'ordre d'attention, pas ce qui serait facultatif.",
     help: {
-      title: "Trois cœurs possibles. Ils ne coûtent pas la même chose.",
+      title: 'Trois façons de préciser ce qui doit entrer dans vos priorités.',
       items: [
         { text: "La fabrication des programmes, côté coach.", effect: "Conséquence : c'est là que se trouve votre gain de temps immédiat." },
         { text: "La consultation par le client, côté téléphone.", effect: "Conséquence : c'est là que se joue l'adoption, mais le gain de temps arrive plus tard." },
@@ -158,44 +307,49 @@ export const POINTS: Point[] = [
   },
   {
     num: 'VI', label: 'Le hors-périmètre',
+    conditionnel: true,
     intention:
-      "ce que le projet ne fera pas dans cette première version, dit explicitement, pour protéger le budget.",
-    q: "Qu'est-ce que ce projet ne fera pas ? C'est la question qui protège votre budget.",
-    hint: "Ce dont vous ne voulez pas, ou ce qui peut attendre une deuxième version.",
+      "la décision à prendre sur un besoin supplémentaire que le client a explicitement évoqué en dehors de ses trois priorités : l'intégrer, le reporter ou l'écarter.",
+    q: "Vous avez évoqué un besoin en plus de vos trois priorités. Faut-il l'intégrer, le reporter ou l'écarter de la première version ?",
+    hint:
+      "Parlez uniquement de ce besoin supplémentaire. S'il n'existe pas, cette partie ne doit pas être affichée.",
     props: [
-      "Je ne veux pas de messagerie dans l'application. Je garde WhatsApp pour parler à mes clients, ça marche très bien.",
-      "Pas de paiement en ligne pour l'instant, je facture à côté.",
-      "Pas de statistiques ni de courbes : je veux d'abord voir si mes clients l'ouvrent."
+      "Je le reporte à une version suivante, mais il faut préserver la possibilité de l'ajouter.",
+      "Je l'écarte complètement : il ne fait pas partie du projet.",
+      "Il doit finalement entrer dans la première version, même si cela change le budget."
     ],
-    reform: "hors périmètre pour cette première version : la messagerie, le paiement en ligne, et les statistiques de progression.",
+    reform:
+      "le besoin supplémentaire évoqué est explicitement reporté ou écarté de la première version ; il n'est pas devenu une priorité implicite.",
     help: {
-      title: "Ce que les coachs retirent le plus souvent de la première version.",
+      title: 'Trois décisions possibles pour ce besoin supplémentaire.',
       items: [
-        { text: "La messagerie interne.", effect: "Conséquence : WhatsApp reste le canal. Économie nette, et vos clients ne changent pas d'habitude." },
-        { text: "Le paiement en ligne.", effect: "Conséquence : la facturation reste où elle est. C'est le poste le plus coûteux évité." },
-        { text: "Les courbes et statistiques.", effect: "Conséquence : reportées en v2, une fois qu'on sait si l'outil est ouvert." }
+        { text: "Je le reporte à plus tard.", effect: "Conséquence : on préserve son ajout futur sans le chiffrer dans la première version." },
+        { text: "Je l'écarte complètement.", effect: "Conséquence : il ne pèse ni sur l'architecture ni sur le budget." },
+        { text: "Je le réintègre à la première version.", effect: "Conséquence : le périmètre et le chiffrage doivent être revus avant d'avancer." }
       ]
     }
   },
   {
     num: 'VII', label: 'Les contraintes',
     intention:
-      "ce qui est imposé et sur quoi le prestataire n'a pas la main : une date, un budget, un outil à garder, une personne à convaincre.",
-    q: "Qu'est-ce qui est imposé, et sur quoi je n'ai pas la main ?",
-    hint: "Une date, un budget, un outil à garder, une personne à convaincre.",
+      "le délai, le budget et les demandes technologiques imposées, puis toute autre contrainte non classique sur laquelle le prestataire n'a pas la main.",
+    q: 'Quels délai, budget et demandes technologiques spécifiques encadrent le projet ?',
+    hint:
+      "Renseignez chaque champ, même si la réponse est « à définir » ou « aucune ». L'IA cherchera ensuite ce que ces trois catégories ne couvrent pas.",
     props: [
-      "Il faut que ce soit prêt avant septembre, c'est là que les gens reprennent le sport.",
-      "Il faut que ça marche sur des téléphones anciens, certains clients n'en ont pas de récent.",
-      "Je ne veux pas avoir à gérer un serveur ni des mises à jour moi-même.",
-      "J'ai un budget, mais je préfère vous en parler de vive voix."
+      serialiserContraintes({
+        delai: "Avant septembre, au moment où l'activité reprend",
+        budget: 'À définir ensemble',
+        technologies: 'Compatible avec les téléphones anciens ; aucune technologie imposée',
+      }),
     ],
-    ouvert: "Le budget n'a pas été abordé : vous avez préféré en parler de vive voix. C'est noté comme tel, ce n'est pas un oubli.",
+    configurateur: 'contraintes',
     help: {
-      title: "Les contraintes qui changent vraiment un chiffrage.",
+      title: "Les contraintes moins visibles que le configurateur ne peut pas deviner.",
       items: [
-        { text: "Une date liée à votre activité.", effect: "Conséquence : elle fixe le périmètre de la v1, pas l'inverse." },
-        { text: "Des téléphones anciens à supporter.", effect: "Conséquence : on écarte certaines technologies dès le départ." },
-        { text: "Aucune envie d'administrer l'outil.", effect: "Conséquence : hébergement et maintenance entrent dans la prestation." }
+        { text: "Une personne ou un comité doit valider avant que le projet avance.", effect: "Conséquence : les validations entrent dans le calendrier et peuvent bloquer une étape." },
+        { text: "Une règle métier, légale, de sécurité ou d'accessibilité s'impose.", effect: "Conséquence : elle doit être vérifiée et chiffrée avant de choisir la façon de construire." },
+        { text: "Le projet dépend d'un prestataire, d'une autorisation ou de données extérieures.", effect: "Conséquence : cette dépendance devient un risque explicite du planning." }
       ]
     }
   },

@@ -2,16 +2,12 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { useCadrage } from '../CadrageContext';
 import { AppHeader } from '../components/Headers';
 import { Attente } from '../components/Attente';
-import { POINTS } from '../../shared/points';
+import { INDEX_HORS_PERIMETRE, POINTS } from '../../shared/points';
 import type { AnalyseGeneree, Fichier } from '../../shared/api';
 import * as api from '../lib/api';
 
 /** Ce que la lecture du document a laissé de côté, dans l'ordre des points. */
 const GAPS = [
-  {
-    label: 'VI — Le hors-périmètre',
-    text: "Ce que le projet ne fera pas n'apparaît nulle part. C'est le point qui fait déraper les budgets.",
-  },
   {
     label: 'VII — Les contraintes',
     text: "Une date de mise en ligne est citée page 4, mais rien sur l'hébergement ni sur qui reprend la maintenance.",
@@ -117,12 +113,14 @@ export function Rapide() {
       // L'enregistrement de fond est différé d'une demi-seconde : sans cette
       // écriture, le serveur analyserait le texte d'avant, ou rien du tout.
       await api.patcher(session.token, { brief });
-      setAnalyse(await api.analyser(session.token));
+      const resultat = await api.analyser(session.token);
+      setAnalyse(resultat);
+      dispatch({ type: 'horsPerimetre', decision: resultat.horsPerimetre });
       setLecture('repos');
     } catch {
       setLecture('erreur');
     }
-  }, [session, brief]);
+  }, [session, brief, dispatch]);
 
   /** Lit, sauf si une lecture a déjà eu lieu : elle sera relancée à la demande. */
   const lireOuSignaler = useCallback(() => {
@@ -140,8 +138,19 @@ export function Rapide() {
     if (fichiers.length > 0 || brief.trim()) void lire();
   }, [session, fichiers.length, brief, lire]);
 
-  const manques = analyse ? analyse.points.filter((p) => !p.couvert) : [];
-  const couverts = analyse ? analyse.points.filter((p) => p.couvert) : [];
+  // Pour un document qui n'évoque aucun besoin supplémentaire, l'analyse rend
+  // le point VI « non applicable » sous la forme couvert + vide. Il disparaît
+  // alors entièrement, au lieu de devenir artificiellement une question.
+  const pointsUtiles = analyse
+    ? analyse.points.filter(
+        (point) =>
+          point.index !== INDEX_HORS_PERIMETRE ||
+          !point.couvert ||
+          Boolean(point.extrait.trim() || point.reponse.trim()),
+      )
+    : [];
+  const manques = pointsUtiles.filter((p) => !p.couvert);
+  const couverts = pointsUtiles.filter((p) => p.couvert);
 
   async function deposer(liste: FileList | null): Promise<void> {
     if (!liste?.length) return;
@@ -334,7 +343,7 @@ export function Rapide() {
                 autre client. */}
             {!session ? (
               <Couverture
-                titre="Cinq points sur huit sont couverts. Il en manque trois."
+                titre="Cinq points sur sept sont couverts. Il en manque deux."
                 manques={GAPS}
                 couverts={COVERED}
                 resume="Les cinq points déjà couverts"
@@ -343,7 +352,7 @@ export function Rapide() {
               <Attente
                 texte="Je lis votre document…"
                 duree={18}
-                note="Je cherche lesquels des huit points il couvre déjà."
+                note="Je cherche les points utiles qu'il couvre déjà."
               />
             ) : lecture === 'erreur' ? (
               <div>
@@ -361,8 +370,12 @@ export function Rapide() {
                 <Couverture
                   titre={
                     manques.length === 0
-                      ? `Les huit points sont couverts.`
-                      : `${analyse.couverts} ${analyse.couverts > 1 ? 'points' : 'point'} sur ${POINTS.length} ${analyse.couverts > 1 ? 'sont couverts' : 'est couvert'}. Il en manque ${manques.length}.`
+                      ? `Tous les points utiles sont couverts.`
+                      : `${couverts.length} ${
+                          couverts.length > 1 ? 'points' : 'point'
+                        } sur ${pointsUtiles.length} ${
+                          couverts.length > 1 ? 'sont couverts' : 'est couvert'
+                        }. Il en manque ${manques.length}.`
                   }
                   manques={manques.map((p) => ({
                     label: `${POINTS[p.index].num} — ${POINTS[p.index].label}`,

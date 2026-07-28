@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS reponse (
   PRIMARY KEY (cadrage_id, point)
 );
 
--- Le fil d'un point : jusqu'à trois questions, chacune écrite à partir de la
--- réponse précédente. La réponse retenue au dossier reste reponse.texte, qui
+-- Le fil d'un point : autant de questions que nécessaire, chacune écrite à
+-- partir de la réponse précédente. La réponse retenue reste reponse.texte, qui
 -- rassemble ce fil : tout ce qui lit le dossier continue de lire ce champ.
 CREATE TABLE IF NOT EXISTS echange (
   cadrage_id TEXT NOT NULL REFERENCES cadrage(id) ON DELETE CASCADE,

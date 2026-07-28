@@ -4,7 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
-import { POINTS } from '../../../shared/points.ts';
+import {
+  INDEX_CONTRAINTES,
+  INDEX_HORS_PERIMETRE,
+  INDEX_PERIMETRE,
+  lireContraintes,
+  POINTS,
+} from '../../../shared/points.ts';
 import type {
   AideGeneree,
   AnalyseGeneree,
@@ -13,12 +19,12 @@ import type {
   PutReponse,
   SuiteReponse,
 } from '../../../shared/api.ts';
+import { QUESTIONS_MIN_PAR_POINT } from '../../../shared/api.ts';
 import * as generation from '../generation.ts';
 import { config, dossierFichiers } from '../config.ts';
 import type { Base } from '../db.ts';
 import {
   ErreurRequete,
-  RANG_MAX,
   ajouterFichier,
   appliquerPatch,
   echangesDe,
@@ -98,6 +104,26 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       const ligne = charger(req.params.token);
       const point = exigerPoint(req.params.point);
       const rang = Number(req.body?.rang ?? 0);
+      if (point === INDEX_CONTRAINTES && rang === 0) {
+        const configuration = lireContraintes(req.body?.texte ?? '');
+        if (Object.values(configuration).some((valeur) => !valeur.trim())) {
+          throw new ErreurRequete(
+            400,
+            'Le délai, le budget et les demandes technologiques doivent être renseignés.',
+          );
+        }
+      }
+      const etat = point === INDEX_HORS_PERIMETRE ? session(db, ligne) : null;
+      if (
+        point === INDEX_HORS_PERIMETRE &&
+        etat?.horsPerimetre?.afficher !== true &&
+        !(etat?.horsPerimetre === null && etat.reponses[String(point)])
+      ) {
+        throw new ErreurRequete(
+          409,
+          'Ce dossier ne contient aucun besoin hors périmètre à préciser.',
+        );
+      }
 
       // La question à laquelle ce texte répond, telle qu'elle a été posée : on
       // la garde avec la réponse, sinon le fil ne se relit pas.
@@ -109,35 +135,61 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       const apres = parToken(db, req.params.token)!;
       const fil = echangesDe(db, ligne.id)[String(point)] ?? [];
 
-      // Le plafond est tenu ici, pas par le modèle : trois questions par point,
-      // et le client peut fermer avant. En mode court, aucune relance — c'est
-      // ce que cette version promet.
-      const plafond = rang >= RANG_MAX || apres.mode === 'court';
-      const suite = req.body?.clore || plafond ? null : (await generation.suite(db, apres, point, fil, rang + 1)).valeur;
+      // Le client peut fermer le point lui-même. Sinon, l'IA pose au moins deux
+      // questions et continue autant que nécessaire. La version courte s'arrête
+      // dès que ces deux réponses minimales sont acquises.
+      const minimumAtteint = rang + 1 >= QUESTIONS_MIN_PAR_POINT;
+      const finModeCourt = apres.mode === 'court' && minimumAtteint;
+      const suite =
+        req.body?.clore || finModeCourt
+          ? null
+          : (await generation.suite(db, apres, point, fil, rang + 1)).valeur;
 
       // Tant que le fil continue, la reformulation porterait sur une réponse
       // encore en cours d'écriture : on ne la calcule pas, et on économise
       // trois générations par échange intermédiaire.
       if (suite) {
         poserQuestion(db, ligne, point, rang + 1, suite.question);
-        return { reponse, suite, rang: rang + 1, reformulation: null, tension: null, deduction: null };
+        return {
+          reponse,
+          suite,
+          rang: rang + 1,
+          reformulation: null,
+          tension: null,
+          deduction: null,
+          horsPerimetre: null,
+        };
       }
 
       const close = ecrireReponse(db, apres, point, { texte: reponse.texte, clore: true });
 
-      // Le point suivant s'écrit dès maintenant, sans faire attendre celui-ci :
-      // le client va lire sa reformulation pendant ce temps, et il trouvera sa
-      // prochaine question déjà prête. Sa demande arrivera sur cette génération
-      // en cours plutôt que d'en lancer une seconde.
-      if (point + 1 < POINTS.length) {
-        void generation.ouverture(db, apres, point + 1).catch(() => undefined);
-      }
-
-      const [reformulation, tension, deduction] = await Promise.all([
+      const decisionPrecedente =
+        point === INDEX_PERIMETRE ? session(db, apres).horsPerimetre : null;
+      const besoinDejaReleve =
+        decisionPrecedente?.afficher && decisionPrecedente.besoin
+          ? `Besoin supplémentaire précédemment relevé dans les mots du client : « ${decisionPrecedente.besoin} ».`
+          : '';
+      const [reformulation, tension, deduction, horsPerimetre] = await Promise.all([
         generation.reformulation(db, apres, point, close.texte),
         generation.tension(db, apres, point, close.texte),
         generation.deduction(db, apres, point, close.texte),
+        point === INDEX_PERIMETRE
+          ? generation
+              .horsPerimetre(db, apres, besoinDejaReleve)
+              .then((resultat) => resultat.valeur)
+          : Promise.resolve(null),
       ]);
+
+      // Le point conditionnel VI est préchargé seulement si un besoin hors des
+      // trois priorités a réellement été relevé. Sinon on prépare directement
+      // les contraintes, sans question de remplissage.
+      const prochainPoint =
+        point === INDEX_PERIMETRE && !horsPerimetre?.afficher
+          ? INDEX_HORS_PERIMETRE + 1
+          : point + 1;
+      if (prochainPoint < POINTS.length) {
+        void generation.ouverture(db, apres, prochainPoint).catch(() => undefined);
+      }
 
       return {
         reponse: close,
@@ -146,6 +198,7 @@ export function routesClient(app: FastifyInstance, db: Base): void {
         reformulation: reformulation.valeur,
         tension: tension.valeur,
         deduction: deduction.valeur,
+        horsPerimetre,
       };
     },
   );
@@ -175,6 +228,15 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       const ligne = charger(req.params.token);
       const point = exigerPoint(req.params.point);
       const rang = Number(req.query.rang ?? 0);
+      const etat = point === INDEX_HORS_PERIMETRE ? session(db, ligne) : null;
+      if (
+        point === INDEX_HORS_PERIMETRE &&
+        etat?.horsPerimetre?.afficher !== true &&
+        !(etat?.horsPerimetre === null && etat.reponses[String(point)])
+      ) {
+        reply.code(204);
+        return undefined;
+      }
 
       if (!rang) {
         const { valeur, origine } = await generation.ouverture(db, ligne, point);
@@ -197,13 +259,24 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     async (req): Promise<AideGeneree> => {
       const ligne = charger(req.params.token);
       const point = exigerPoint(req.params.point);
+      const etat = point === INDEX_HORS_PERIMETRE ? session(db, ligne) : null;
+      if (
+        point === INDEX_HORS_PERIMETRE &&
+        etat?.horsPerimetre?.afficher !== true &&
+        !(etat?.horsPerimetre === null && etat.reponses[String(point)])
+      ) {
+        throw new ErreurRequete(
+          409,
+          'Ce dossier ne contient aucun besoin hors périmètre à préciser.',
+        );
+      }
       const { valeur, origine } = await generation.aide(db, ligne, point);
       return { ...valeur, origine };
     },
   );
 
   /**
-   * Lit le document déposé et dit lesquels des huit points il couvre.
+   * Lit le document déposé et dit quels points utiles il couvre.
    * Les fichiers texte sont joints au brief ; les binaires (PDF, Word) sont
    * signalés au client plutôt que passés sous silence.
    */
@@ -231,8 +304,46 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       throw new ErreurRequete(400, 'Rien à lire : déposez un document ou décrivez le projet.');
     }
 
-    const { valeur, origine } = await generation.analyse(db, ligne, morceaux.join('\n\n'));
-    return { ...valeur, origine, fichiersIllisibles: illisibles };
+    const texteDocuments = morceaux.join('\n\n');
+    const [analyse, decision] = await Promise.all([
+      generation.analyse(db, ligne, texteDocuments),
+      generation.horsPerimetre(db, ligne, texteDocuments),
+    ]);
+    const horsPerimetre = decision.valeur;
+    const points = analyse.valeur.points.map((point) => {
+      if (point.index !== INDEX_HORS_PERIMETRE) return point;
+      if (!horsPerimetre.afficher) {
+        return {
+          ...point,
+          couvert: true,
+          extrait: '',
+          reponse: '',
+          manque: '',
+        };
+      }
+      return {
+        ...point,
+        couvert: false,
+        extrait: '',
+        reponse: '',
+        manque: `Vous avez évoqué « ${horsPerimetre.besoin} ». Il reste à décider s'il entre dans la première version, s'il est reporté ou s'il est écarté.`,
+      };
+    });
+    const couverts = points.filter(
+      (point) =>
+        point.couvert &&
+        (point.index !== INDEX_HORS_PERIMETRE ||
+          Boolean(point.extrait.trim() || point.reponse.trim())),
+    ).length;
+
+    return {
+      ...analyse.valeur,
+      points,
+      couverts,
+      origine: analyse.origine,
+      fichiersIllisibles: illisibles,
+      horsPerimetre,
+    };
   });
 
   // Le dossier reste modifiable après validation : l'écran de fin le promet

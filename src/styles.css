@@ -151,6 +151,22 @@ input {
   }
 }
 
+@keyframes question-turn-in {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(18px) scale(0.992);
+  }
+  55% {
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
@@ -636,39 +652,6 @@ textarea.landing__input {
   text-align: center;
 }
 
-/* ------------------------------------------------------------------ fil -- */
-
-/* Ce qui s'est déjà dit sur le point en cours. Sans lui, une question de suite
-   paraît sortie de nulle part. */
-.fil {
-  border-left: 2px solid var(--rule);
-  padding-left: 16px;
-  margin: 0 0 34px;
-}
-
-.fil__label {
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  margin: 0 0 14px;
-}
-
-.fil__echange + .fil__echange {
-  margin-top: 14px;
-}
-
-.fil__question {
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink-45);
-  margin: 0 0 4px;
-}
-
-.fil__reponse {
-  font-size: 15.5px;
-  line-height: 1.55;
-  margin: 0;
-}
-
 /* La marque d'une suggestion cumulable : + à prendre, × à retirer. */
 .prop__marque {
   font-family: 'IBM Plex Mono', monospace;
@@ -681,8 +664,8 @@ textarea.landing__input {
 }
 
 .answer__clore {
-  min-height: 44px;
-  padding: 0 4px;
+  min-height: 46px;
+  padding: 0 16px;
   font-size: 14px;
   margin-right: auto;
 }
@@ -759,7 +742,7 @@ textarea.landing__input {
 
 /* --------------------------------------------------------------- départ -- */
 
-/* La question qui précède les huit points. Même mise en page que la
+/* La question qui précède les points du cadrage. Même mise en page que la
    reformulation : une question, rien d'autre à l'écran. */
 .depart__body {
   max-width: 680px;
@@ -1081,16 +1064,17 @@ textarea.landing__input {
   animation: fade 0.3s ease-out both;
 }
 
-.question {
-  animation: rise 0.4s ease-out both;
+.question-turn {
+  animation: question-turn-in 0.52s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  scroll-margin-top: 96px;
+  transform-origin: 50% 0;
 }
 
-/* Masqué sur mobile : le repère d'avancement joue déjà ce rôle. */
 .question__header {
   font-size: 11px;
   letter-spacing: 0.18em;
   margin: 0 0 18px;
-  display: var(--rail);
+  display: block;
 }
 
 .question__title {
@@ -1145,6 +1129,11 @@ textarea.landing__input {
   border-color: var(--ink);
 }
 
+.prop:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .prop--picked {
   border-color: var(--ink);
   background: var(--paper-2);
@@ -1171,6 +1160,97 @@ textarea.landing__input {
   resize: vertical;
   outline: none;
   min-height: 132px;
+}
+
+/* Premier tour du point VII : les contraintes courantes sont structurées
+   avant de rendre la main aux questions libres de l'IA. */
+.contraintes-config {
+  overflow: hidden;
+}
+
+.contraintes-config__intro {
+  padding: 18px 18px 16px;
+}
+
+.contraintes-config__kicker {
+  margin: 0 0 7px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+}
+
+.contraintes-config__texte {
+  max-width: 58ch;
+  margin: 0;
+  color: var(--ink-70);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.contraintes-config__grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 1px;
+  padding-top: 1px;
+  background: var(--rule-soft);
+  border-top: 1px solid var(--rule-soft);
+}
+
+.contraintes-config__champ {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px 18px;
+  background: var(--paper-2);
+}
+
+.contraintes-config__champ--large {
+  grid-column: 1 / -1;
+}
+
+.contraintes-config__label {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--ink-45);
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.contraintes-config__input {
+  width: 100%;
+  min-height: 46px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  outline: none;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.contraintes-config__input::placeholder {
+  color: var(--ink-45);
+}
+
+.contraintes-config__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.contraintes-config__aide {
+  color: var(--ink-45);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.answer__actions.contraintes-config__actions {
+  flex-wrap: wrap;
+}
+
+.contraintes-config__etat {
+  max-width: 36ch;
+  font-size: 11px;
 }
 
 .answer__actions {

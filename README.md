@@ -3,12 +3,15 @@
 Cadrage — l'entretien que remplit un client avant le premier rendez-vous, pour
 que le chiffrage parte d'un dossier écrit plutôt que d'un appel.
 
-Huit points, un court échange sur chacun : la question suivante est écrite à
-partir de la réponse précédente, jusqu'à trois par point. Le client écrit avec
-ses mots ou clique parmi des réponses probables — une seule ou plusieurs, selon
-ce que la question appelle. L'outil reformule et fait valider, relève les
-contradictions, et produit un récapitulatif où l'on distingue toujours ce que le
-client a dit, ce qu'il a validé, et ce qui a été déduit sans lui.
+Sept points systématiques et un point conditionnel, avec au moins deux questions
+sur chaque point affiché : chaque question suivante est écrite à partir de la
+réponse précédente, puis l'IA continue seulement si une précision utile manque.
+La partie « Hors périmètre » n'existe que si le client a lui-même évoqué un
+besoin supplémentaire. Le client écrit avec ses mots ou clique parmi des
+réponses probables — une seule ou plusieurs, selon ce que la question appelle.
+L'outil reformule et fait valider, relève les contradictions, et produit un
+récapitulatif où l'on distingue toujours ce que le client a dit, ce qu'il a
+validé, et ce qui a été déduit sans lui.
 
 ## Lancer
 
@@ -37,7 +40,7 @@ d'un client de démonstration en croyant que c'est le sien.
 | Écran | Fichier | Rôle |
 | --- | --- | --- |
 | Page publique | `src/screens/Landing.tsx` | Ce qu'est le cadrage, et le formulaire qui l'ouvre |
-| Point de départ | `src/screens/Depart.tsx` | Où en est le client : la question qui précède les huit points |
+| Point de départ | `src/screens/Depart.tsx` | Où en est le client : la question qui précède le cadrage |
 | Accueil | `src/screens/Accueil.tsx` | Entrée du client invité, et les deux raccourcis |
 | Entretien | `src/screens/Entretien.tsx` | La question en cours, le sommaire, l'aide et l'arbitrage |
 | Reformulation | `src/screens/Reformulation.tsx` | « Si je comprends bien : … », à confirmer avant d'avancer |
@@ -50,7 +53,8 @@ d'un client de démonstration en croyant que c'est le sien.
 
 ## Où se trouve quoi
 
-- `shared/points.ts` — les huit points. Chacun porte une **intention** (ce que
+- `shared/points.ts` — les huit points possibles, dont un conditionnel et un
+  configurateur. Chacun porte une **intention** (ce que
   le point doit établir, jamais réécrite) et une formulation de référence
   (question, relance, réponses probables) qui sert de repli quand le modèle est
   absent. C'est la structure du dossier : la retoucher change ce qui est
@@ -76,7 +80,7 @@ cadrage et rend le lien. C'est ce que fait le formulaire de `/`.
 
 La première chose demandée n'est pas dans ce formulaire : **où le client en
 est** est la question qui ouvre l'entretien (`src/screens/Depart.tsx`), avant
-les huit points. C'est une question, pas un renseignement, et sa réponse part
+les points du cadrage. C'est une question, pas un renseignement, et sa réponse part
 dans le contexte de chaque génération.
 
 | Choix | Ce que ça change |
@@ -111,7 +115,7 @@ tout le monde à la fois.
 
 ## Le modèle
 
-L'entretien est conduit par **`qwen/qwen3.7-plus`** via OpenRouter. Six
+L'entretien est conduit par **`qwen/qwen3.7-plus`** via OpenRouter. Huit
 capacités, toutes côté serveur — la clé ne touche jamais le navigateur :
 
 | Capacité | Ce qu'elle remplace |
@@ -122,7 +126,8 @@ capacités, toutes côté serveur — la clé ne touche jamais le navigateur :
 | Tension | La contradiction entre deux réponses, avec l'arbitrage proposé |
 | Aide | Trois pistes et leur conséquence chiffrée sur le projet |
 | Déduction | Ce qu'on peut poser sans le demander |
-| Analyse | Quels points des huit un document déposé couvre déjà |
+| Décision hors périmètre | Si un besoin supplémentaire explicite justifie d'afficher le point VI |
+| Analyse | Quels points utiles un document déposé couvre déjà |
 
 Deux partis pris, mesurés :
 
@@ -145,28 +150,40 @@ maquette — moins ajustés, jamais interrompus. Chaque repli est tracé dans le
 journal (`[generation] repli sur …`) : une dégradation silencieuse serait une
 panne invisible.
 
-Un repli n'est jamais mis en cache : il ne fige pas une version dégradée, mais
-il ne survit pas non plus au rechargement. Sur un dossier réel, le
-récapitulatif préfère alors n'afficher aucune reformulation plutôt que celle
-d'un autre client.
+Un repli n'est normalement jamais mis en cache : il ne fige pas une version
+dégradée, mais il ne survit pas non plus au rechargement. Seule la décision de
+masquer le hors-périmètre est conservée même sans modèle, car elle détermine la
+navigation et doit rester stable. Sur un dossier réel, le récapitulatif préfère
+n'afficher aucune reformulation plutôt que celle d'un autre client.
 
 Réglages : `CADRAGE_OPENROUTER_KEY`, `CADRAGE_MODELE`, `CADRAGE_LLM_TIMEOUT`.
 
 ## Le fil d'un point
 
-Un point n'est plus une question mais **jusqu'à trois**, chacune écrite à partir
-de la réponse précédente. Trois garde-fous, parce que c'est là que ce genre
-d'outil devient bavard :
+Un point porte **au moins deux questions**, chacune écrite à partir de la
+réponse précédente. Ensuite, le modèle continue seulement si une précision
+change encore le périmètre ou le chiffrage :
 
-- **Le plafond est tenu par le code, pas par le modèle** (`RANG_MAX` dans
-  `server/src/repo.ts`). Au troisième échange le point se ferme, quoi qu'en dise
-  la génération.
-- **Le client peut couper court** dès la deuxième question : « c'est bon pour ce
-  point ».
-- **Le modèle doit fermer par défaut.** Sa consigne : ne relancer que s'il
-  manque un ordre de grandeur, si la réponse ouvre deux directions
-  incompatibles, ou si elle pourrait être celle de n'importe qui. Sans clé, il
-  n'y a aucune relance — un repli n'invente jamais une question de plus.
+- **Deux réponses minimales sont garanties par le code.** Même sans clé LLM,
+  une relance de précision est posée avant de clore le point.
+- **Il n'y a pas de plafond arbitraire.** Le modèle peut poser autant de
+  questions utiles que nécessaire.
+- **Le client garde la main** dès la deuxième question avec « Passer à l'étape
+  suivante ». Sa réponse en cours est enregistrée avant le passage.
+- **Le modèle ferme dès que le point est établi.** Il ne relance pas par
+  curiosité, pour faire confirmer une réponse, ni pour anticiper un autre point.
+
+Le point VI suit une règle plus stricte : à la clôture du périmètre, une
+génération dédiée recherche un besoin supplémentaire explicitement formulé.
+Sans ce besoin, le point est masqué dans le sommaire, sauté dans la navigation,
+absent du récapitulatif et jamais préchargé. En cas de doute ou d'absence du
+modèle, la décision est toujours de le masquer.
+
+Le point VII commence par un configurateur déterministe : délai, budget et
+demandes technologiques spécifiques. Sa réponse est versée dans le même fil que
+les réponses libres. Le tour suivant revient à l'IA, avec une consigne ciblée :
+chercher seulement les contraintes non classiques encore absentes, sans
+redemander les trois champs.
 
 Une relance ne coûte **aucune attente supplémentaire** : la question de suite
 voyage dans la réponse du `PUT`, et tant que le fil continue, reformulation,
@@ -178,7 +195,8 @@ fil, une par ligne, et tout ce qui lit le dossier — récapitulatif, tableau de
 bord, analyse — continue de lire ce seul champ. Le fil lui-même vit dans la
 table `echange`, avec les questions telles qu'elles ont été posées.
 
-**Mode court** : aucune relance, une question par point. C'est la soupape.
+**Mode court** : exactement deux questions par point, sans relance
+supplémentaire. C'est la soupape.
 
 ## L'attente
 

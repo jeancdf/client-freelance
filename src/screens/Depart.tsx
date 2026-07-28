@@ -5,7 +5,7 @@ import type { Maturite } from '../../shared/api';
 import * as api from '../lib/api';
 
 /**
- * La première question de l'entretien, avant les huit points : où en est le
+ * La première question de l'entretien, avant les points du cadrage : où en est le
  * client. Elle est ici et non dans le formulaire d'inscription parce que c'est
  * une question, pas un renseignement — et parce que sa réponse décide du ton de
  * tout ce qui suit.
@@ -61,7 +61,7 @@ export function Depart() {
 
       <main className="depart">
         <div className="depart__body">
-          <p className="lbl depart__kicker">Avant les huit points — une question</p>
+          <p className="lbl depart__kicker">Avant le cadrage — une question</p>
           <h1 className="serif depart__title">Où en êtes-vous, aujourd'hui ?</h1>
           <p className="depart__lead">
             Votre réponse décide des questions que je vais vous poser. Il n'y a pas de bonne

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, type Dispatch } from 'react';
-import { POINTS } from '../shared/points';
+import {
+  INDEX_HORS_PERIMETRE,
+  INDEX_PERIMETRE,
+  POINTS,
+} from '../shared/points';
 import * as api from './lib/api';
 import type { Action, State } from './state';
 import { currentIndex, ouvertureOf } from './state';
@@ -148,20 +152,25 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
         reformulation: suite.reformulation,
         tension: suite.tension,
         deduction: suite.deduction,
+        horsPerimetre: suite.horsPerimetre,
       });
 
       // Le point suivant s'écrit pendant que le client lit sa reformulation :
       // c'est le seul moment où il attend déjà quelque chose, et la réponse
       // qu'il vient de donner fait partie du contexte. Inutile tant que le fil
       // de ce point-ci continue — le client n'ira pas au suivant.
-      if (!suite.suite && index + 1 < POINTS.length) {
+      const prochainPoint =
+        index === INDEX_PERIMETRE && suite.horsPerimetre?.afficher !== true
+          ? INDEX_HORS_PERIMETRE + 1
+          : index + 1;
+      if (!suite.suite && prochainPoint < POINTS.length) {
         void api
-          .lireOuverture(token, index + 1)
+          .lireOuverture(token, prochainPoint)
           .then((r) => {
             if (!r) return;
             dispatch({
               type: 'ouverture',
-              point: index + 1,
+              point: prochainPoint,
               rang: 0,
               ouverture: {
                 question: r.question,

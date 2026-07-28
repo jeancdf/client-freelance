@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCadrage } from '../CadrageContext';
 import { AppHeader } from '../components/Headers';
 import { POINTS } from '../../shared/points';
-import { answerOf } from '../state';
+import { answerOf, indicesPointsVisibles } from '../state';
 import { dateLongue, minutes } from '../lib/dates';
 import * as api from '../lib/api';
 
@@ -13,6 +13,7 @@ function capitalise(text: string): string {
 export function Recap() {
   const { state, dispatch } = useCadrage();
   const session = state.session;
+  const pointsVisibles = indicesPointsVisibles(state);
   const [envoi, setEnvoi] = useState<'repos' | 'envoi' | 'erreur'>('repos');
 
   const enTete = session
@@ -69,7 +70,8 @@ export function Recap() {
           </div>
         </div>
 
-        {POINTS.map((point, k) => {
+        {pointsVisibles.map((k) => {
+          const point = POINTS[k];
           // Sur un vrai dossier, un point sans réponse reste vide : on ne
           // remplit jamais le récapitulatif à la place du client.
           const repondu = state.answers[k] !== undefined;

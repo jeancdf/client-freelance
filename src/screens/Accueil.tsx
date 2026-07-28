@@ -50,8 +50,8 @@ export function Accueil() {
             <div className="accueil__path">
               <h2 className="serif accueil__path-title">Version courte — droit au but</h2>
               <p className="accueil__path-body">
-                Les mêmes huit points, mais une seule question chacun : des réponses déjà
-                rédigées à choisir ou à corriger, et je ne rebondis sur rien.
+                Les mêmes points essentiels, avec deux questions chacun : des réponses déjà
+                rédigées à choisir ou à corriger, sans relance supplémentaire.
               </p>
               <button
                 type="button"

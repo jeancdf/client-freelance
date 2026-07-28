@@ -1,8 +1,19 @@
+import { useEffect, useRef } from 'react';
 import { useCadrage } from '../CadrageContext';
 import { AppHeader } from '../components/Headers';
 import { Attente } from '../components/Attente';
-import { POINTS } from '../../shared/points';
-import { answerOf, currentIndex, ouvertureOf } from '../state';
+import {
+  lireContraintes,
+  POINTS,
+  serialiserContraintes,
+  type ConfigurationContraintes,
+} from '../../shared/points';
+import {
+  answerOf,
+  currentIndex,
+  indicesPointsVisibles,
+  ouvertureOf,
+} from '../state';
 
 const LAST = POINTS.length - 1;
 
@@ -18,16 +29,146 @@ const MAQUETTE_TENSION = {
   optionB: "Le suivi des charges passe d'abord",
 };
 
+function ConfigurateurContraintes({
+  configuration,
+  invalide,
+  occupe,
+  sessionReelle,
+  modeLong,
+  changer,
+  soumettre,
+  passerEnCourt,
+}: {
+  configuration: ConfigurationContraintes;
+  invalide: boolean;
+  occupe: boolean;
+  sessionReelle: boolean;
+  modeLong: boolean;
+  changer: (champ: keyof ConfigurationContraintes, valeur: string) => void;
+  soumettre: () => void;
+  passerEnCourt: () => void;
+}) {
+  return (
+    <>
+      <div className="card contraintes-config">
+        <div className="contraintes-config__intro">
+          <p className="lbl contraintes-config__kicker">Les trois données de base</p>
+          <p className="contraintes-config__texte">
+            Si une réponse n’est pas encore fixée, écrivez « à définir ». Si aucune
+            technologie n’est imposée, écrivez « aucune ».
+          </p>
+        </div>
+
+        <div className="contraintes-config__grille">
+          <label className="contraintes-config__champ" htmlFor="contrainte-delai">
+            <span className="contraintes-config__label">Délai ou échéance</span>
+            <input
+              id="contrainte-delai"
+              type="text"
+              className="contraintes-config__input"
+              value={configuration.delai}
+              onChange={(event) => changer('delai', event.target.value)}
+              placeholder="Ex. Avant le 15 septembre, ou à définir"
+            />
+            <span className="contraintes-config__aide">
+              Date imposée, période souhaitée ou absence d’échéance.
+            </span>
+          </label>
+
+          <label className="contraintes-config__champ" htmlFor="contrainte-budget">
+            <span className="contraintes-config__label">Budget disponible</span>
+            <input
+              id="contrainte-budget"
+              type="text"
+              className="contraintes-config__input"
+              value={configuration.budget}
+              onChange={(event) => changer('budget', event.target.value)}
+              placeholder="Ex. 8 000 à 12 000 €, ou à définir"
+            />
+            <span className="contraintes-config__aide">
+              Une enveloppe, une fourchette ou « à discuter de vive voix ».
+            </span>
+          </label>
+
+          <label
+            className="contraintes-config__champ contraintes-config__champ--large"
+            htmlFor="contrainte-technologies"
+          >
+            <span className="contraintes-config__label">
+              Demandes technologiques spécifiques
+            </span>
+            <input
+              id="contrainte-technologies"
+              type="text"
+              className="contraintes-config__input"
+              value={configuration.technologies}
+              onChange={(event) => changer('technologies', event.target.value)}
+              placeholder="Ex. WordPress imposé, connexion à Abby, ou aucune"
+            />
+            <span className="contraintes-config__aide">
+              Technologie, logiciel, hébergeur, appareil ou intégration déjà imposés.
+            </span>
+          </label>
+        </div>
+
+        <div className="answer__actions contraintes-config__actions">
+          <span className="note contraintes-config__etat">
+            {invalide
+              ? 'Les trois champs doivent être renseignés'
+              : 'Prêt pour la recherche des autres contraintes'}
+          </span>
+          <button
+            type="button"
+            className="btn btn--primary answer__submit"
+            onClick={soumettre}
+            disabled={occupe || invalide}
+          >
+            {occupe ? 'J’analyse vos contraintes…' : 'Continuer avec l’IA'}
+          </button>
+        </div>
+      </div>
+
+      <div className="answer__footer">
+        <p className="note answer__saved">
+          {sessionReelle
+            ? 'Enregistré à chaque mot · fermez cette page, le lien vous ramènera ici'
+            : "Démonstration — rien n'est enregistré sur cet écran"}
+        </p>
+        {modeLong && (
+          <button type="button" className="btn--accent" onClick={passerEnCourt}>
+            Aller plus vite : version courte
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
 export function Entretien() {
   const { state, dispatch, entretien } = useCadrage();
+  const questionRef = useRef<HTMLDivElement>(null);
   const index = currentIndex(state);
   const point = POINTS[index];
+  const pointsVisibles = indicesPointsVisibles(state);
+
+  // Une relance remplace la question au même endroit. On l'accompagne d'un
+  // défilement doux vers ce bloc, plutôt que de renvoyer brutalement en haut.
+  useEffect(() => {
+    if (state.rang === 0) return;
+    const animationReduite = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const frame = window.requestAnimationFrame(() => {
+      questionRef.current?.scrollIntoView({
+        behavior: animationReduite ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [index, state.rang]);
 
   const isDone = (k: number) => state.answers[k] !== undefined;
 
   // Les points déjà écrits, avant celui en cours : le « dossier » consultable.
-  const answeredBefore: number[] = [];
-  for (let k = 0; k < index; k++) if (isDone(k)) answeredBefore.push(k);
+  const answeredBefore = pointsVisibles.filter((k) => k < index && isDone(k));
   const last = answeredBefore.length ? answeredBefore[answeredBefore.length - 1] : null;
 
   const draft = state.draft.trim();
@@ -37,15 +178,35 @@ export function Entretien() {
   // que d'afficher les réponses probables d'un autre métier.
   const ouverture = ouvertureOf(state, index);
   const multiple = ouverture.choix === 'multiple';
-  // Le fil déjà échangé sur ce point : sans lui, une question de suite semble
-  // sortie de nulle part.
-  const fil = (state.echanges[index] ?? []).slice(0, state.rang);
   const lignes = state.draft.split('\n').filter((l) => l.trim());
+  const configurateurContraintes =
+    state.rang === 0 && point.configurateur === 'contraintes';
   // Sur un dossier réel, tant que le point n'est pas écrit pour ce client, on
   // n'affiche ni question ni réponses : la formulation de référence est un
   // repli de panne, pas un écran d'attente.
-  const enAttente = Boolean(state.session) && !state.ouvertures[`${index}:${state.rang}`];
+  const enAttente =
+    Boolean(state.session) &&
+    !configurateurContraintes &&
+    !state.ouvertures[`${index}:${state.rang}`];
   const propositions = ouverture.propositions;
+  const selection = state.rang === 0 ? point.selection : undefined;
+  const selectionInvalide = Boolean(
+    selection && (lignes.length < selection.min || lignes.length > selection.max),
+  );
+  const contraintes = lireContraintes(state.draft);
+  const contraintesInvalides =
+    configurateurContraintes &&
+    Object.values(contraintes).some((valeur) => !valeur.trim());
+
+  const changerContrainte = (
+    champ: keyof ConfigurationContraintes,
+    valeur: string,
+  ) => {
+    dispatch({
+      type: 'setDraft',
+      value: serialiserContraintes({ ...contraintes, [champ]: valeur }),
+    });
+  };
 
   // Même règle pour l'aide : sur un dossier réel, on n'affiche pas les pistes
   // d'un autre métier en attendant celles de ce client.
@@ -67,11 +228,12 @@ export function Entretien() {
       />
 
       <main className="entretien__main">
-        <nav aria-label="Les huit points du cadrage" className="rail">
+        <nav aria-label="Les points du cadrage" className="rail">
           <p className="lbl rail__title">Le dossier</p>
           <ol className="rail__list">
-            {POINTS.map((p, k) => (
-              <li key={p.num} className="rail__item">
+            {pointsVisibles.map((k) => {
+              const p = POINTS[k];
+              return <li key={p.num} className="rail__item">
                 <span className={k === index ? 'rail__num rail__num--current' : 'rail__num'}>
                   {p.num}
                 </span>
@@ -88,8 +250,8 @@ export function Entretien() {
                 >
                   {p.label}
                 </button>
-              </li>
-            ))}
+              </li>;
+            })}
           </ol>
         </nav>
 
@@ -99,8 +261,9 @@ export function Entretien() {
               Point {point.num} · {point.label}
             </span>
             <div className="progress__bars" aria-hidden="true">
-              {POINTS.map((p, k) => (
-                <span
+              {pointsVisibles.map((k) => {
+                const p = POINTS[k];
+                return <span
                   key={p.num}
                   className={
                     k === index
@@ -109,8 +272,8 @@ export function Entretien() {
                         ? 'progress__bar progress__bar--done'
                         : 'progress__bar'
                   }
-                />
-              ))}
+                />;
+              })}
             </div>
           </div>
 
@@ -176,46 +339,60 @@ export function Entretien() {
             </div>
           )}
 
-          {fil.length > 0 && (
-            <div className="fil">
-              <p className="lbl fil__label">
-                Sur ce point, déjà — question {fil.length} sur 3 au maximum
+          <div
+            key={`${index}:${state.rang}`}
+            ref={questionRef}
+            className="question-turn"
+          >
+            <div className="question" aria-live="polite">
+              <p className="lbl question__header">
+                {configurateurContraintes
+                  ? 'Configuration initiale · trois champs'
+                  : `Question ${state.rang + 1}${
+                      state.rang === 0
+                        ? ' · deux minimum sur ce point'
+                        : state.rang === 1
+                          ? ' · l’IA peut maintenant conclure'
+                          : ' · une précision reste utile'
+                    }`}
               </p>
-              {fil.map((echange) => (
-                <div key={echange.question} className="fil__echange">
-                  <p className="fil__question">{echange.question}</p>
-                  <p className="quote fil__reponse">« {echange.reponse} »</p>
-                </div>
-              ))}
+              {/* Rien ne s'affiche à la place de la question tant qu'elle n'est
+                  pas écrite : lire une question, commencer à y penser, et la voir
+                  remplacée par une autre est pire que d'attendre. */}
+              {enAttente ? (
+                <Attente
+                  texte="J'écris la question pour votre métier…"
+                  duree={5}
+                  note="Quelques secondes. Les points suivants s'ouvriront sans attendre."
+                />
+              ) : (
+                <>
+                  <h1 className="serif question__title">{ouverture.question}</h1>
+                  {state.mode !== 'court' && <p className="question__hint">{ouverture.relance}</p>}
+                </>
+              )}
             </div>
-          )}
 
-          <div className="question">
-            <p className="lbl question__header">
-              Point {point.num} — {point.label}
-            </p>
-            {/* Rien ne s'affiche à la place de la question tant qu'elle n'est
-                pas écrite : lire une question, commencer à y penser, et la voir
-                remplacée par une autre est pire que d'attendre. */}
-            {enAttente ? (
-              <Attente
-                texte="J'écris la question pour votre métier…"
-                duree={5}
-                note="Quelques secondes. Les points suivants s'ouvriront sans attendre."
-              />
-            ) : (
+            {!state.help && !enAttente && (
+              <div>
+              {configurateurContraintes ? (
+                <ConfigurateurContraintes
+                  configuration={contraintes}
+                  invalide={contraintesInvalides}
+                  occupe={state.occupe}
+                  sessionReelle={Boolean(state.session)}
+                  modeLong={state.mode === 'long'}
+                  changer={changerContrainte}
+                  soumettre={() => void entretien.soumettre()}
+                  passerEnCourt={() => dispatch({ type: 'switchCourt' })}
+                />
+              ) : (
               <>
-                <h1 className="serif question__title">{ouverture.question}</h1>
-                {state.mode !== 'court' && <p className="question__hint">{ouverture.relance}</p>}
-              </>
-            )}
-          </div>
-
-          {!state.help && !enAttente && (
-            <div>
               <div className="props">
                 <p className="lbl props__label">
-                  {multiple
+                  {selection
+                    ? `${lignes.length}/${selection.max} sélectionnés — choisissez exactement ${selection.max} éléments`
+                    : multiple
                     ? 'Cliquez tout ce qui vous concerne — plusieurs réponses possibles'
                     : 'Réponses probables — cliquez, puis corrigez à votre main'}
                 </p>
@@ -228,6 +405,9 @@ export function Entretien() {
                         type="button"
                         aria-pressed={multiple ? prise : undefined}
                         className={prise ? 'prop prop--picked' : 'prop'}
+                        disabled={Boolean(
+                          selection && lignes.length >= selection.max && !prise,
+                        )}
                         onClick={() => dispatch({ type: 'pickProp', text })}
                       >
                         {multiple && (
@@ -244,7 +424,9 @@ export function Entretien() {
 
               <div className="card">
                 <label htmlFor="rep" className="answer__label">
-                  Votre réponse — modifiable à volonté
+                  {selection
+                    ? 'Vos trois éléments — un par ligne, modifiables à volonté'
+                    : 'Votre réponse — modifiable à volonté'}
                 </label>
                 <textarea
                   id="rep"
@@ -252,7 +434,11 @@ export function Entretien() {
                   className="answer__input"
                   value={state.draft}
                   onChange={(e) => dispatch({ type: 'setDraft', value: e.target.value })}
-                  placeholder="Écrivez comme vous le raconteriez de vive voix."
+                  placeholder={
+                    selection
+                      ? 'Écrivez exactement trois éléments, un par ligne.'
+                      : 'Écrivez comme vous le raconteriez de vive voix.'
+                  }
                 />
                 <div className="answer__actions">
                   <button
@@ -263,27 +449,31 @@ export function Entretien() {
                     Je ne sais pas, aidez-moi
                   </button>
                   {/* Dès la deuxième question d'un point, le client peut
-                      couper court : c'est lui qui sait s'il a fait le tour. */}
+                      décider lui-même que le point est assez précis. */}
                   {state.rang > 0 && (
                     <button
                       type="button"
-                      className="btn btn--underline answer__clore"
+                      className="btn btn--outline answer__clore"
                       onClick={() => void entretien.clore()}
                       disabled={state.occupe}
                     >
-                      C'est bon pour ce point
+                      {index >= LAST
+                        ? 'Terminer l’entretien'
+                        : 'Passer à l’étape suivante'}
                     </button>
                   )}
                   <button
                     type="button"
                     className="btn btn--primary answer__submit"
                     onClick={() => void entretien.soumettre()}
-                    disabled={state.occupe}
+                    disabled={state.occupe || selectionInvalide}
                   >
                     {state.occupe
-                      ? 'Je vous lis…'
-                      : index >= LAST && state.rang >= 2
-                        ? 'Voir le récapitulatif'
+                      ? 'J’analyse votre réponse…'
+                      : selectionInvalide
+                        ? `${lignes.length}/${selection?.max ?? 3} éléments sélectionnés`
+                      : state.rang === 0
+                        ? 'Question suivante'
                         : 'Continuer'}
                   </button>
                 </div>
@@ -305,11 +495,13 @@ export function Entretien() {
                   </button>
                 )}
               </div>
-            </div>
-          )}
+              </>
+              )}
+              </div>
+            )}
 
-          {state.help && (
-            <div className="help">
+            {state.help && (
+              <div className="help">
               <div className="help__head">
                 <p className="lbl help__head-label">Annexe — aide sur le point {point.num}</p>
                 <button
@@ -356,8 +548,9 @@ export function Entretien() {
                   </span>
                 </button>
               </div>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </section>
       </main>
     </div>

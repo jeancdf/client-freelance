@@ -129,12 +129,11 @@ export function Deroule() {
       <SiteHeader />
 
       <div className="deroule__intro">
-        <p className="lbl deroule__kicker">Déroulé de l'entretien · les huit points</p>
+        <p className="lbl deroule__kicker">Déroulé · sept points systématiques, un conditionnel</p>
         <h1 className="serif deroule__title">Ce que le client voit, et ce que la machine en fait.</h1>
         <p className="deroule__lead">
-          Chaque point pose une question, propose des réponses probables tirées du métier du client,
-          puis fait quelque chose de la réponse : la reformuler, en déduire une autre, relever une
-          contradiction, ou la laisser ouverte. Rien n'est ajouté que le client n'ait validé.
+          Chaque point utile pose au moins deux questions. Le hors-périmètre n'apparaît que si le
+          client a lui-même évoqué un besoin supplémentaire. Rien n'est ajouté pour remplir le plan.
         </p>
         <p className="note deroule__case">
           Cas suivi : coach sportif, quarante clients, demande initiale « une appli de fitness ».

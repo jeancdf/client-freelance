@@ -7,15 +7,29 @@
  */
 
 import { createHash } from 'node:crypto';
-import { POINTS } from '../../shared/points.ts';
-import type { Aide, Analyse, Choix, Echange, Ouverture, PointAnalyse, Tension } from '../../shared/api.ts';
+import {
+  INDEX_HORS_PERIMETRE,
+  POINTS,
+  relanceDePrecision,
+} from '../../shared/points.ts';
+import { QUESTIONS_MIN_PAR_POINT } from '../../shared/api.ts';
+import type {
+  Aide,
+  Analyse,
+  Choix,
+  DecisionHorsPerimetre,
+  Echange,
+  Ouverture,
+  PointAnalyse,
+  Tension,
+} from '../../shared/api.ts';
 import type { Base } from './db.ts';
-import { RANG_MAX } from './repo.ts';
 import * as llm from './llm.ts';
 import {
   promptAide,
   promptAnalyse,
   promptDeduction,
+  promptDecisionHorsPerimetre,
   promptOuverture,
   promptReformulation,
   promptSuite,
@@ -76,6 +90,30 @@ function ecrire(db: Base, cadrageId: string, point: number, genre: string, cle: 
      ON CONFLICT (cadrage_id, point, genre) DO UPDATE SET
        cle = excluded.cle, contenu = excluded.contenu, cree_le = excluded.cree_le`,
   ).run(cadrageId, point, genre, cle, JSON.stringify(valeur), maintenant());
+}
+
+function decisionHorsPerimetreStockee(
+  db: Base,
+  cadrageId: string,
+): DecisionHorsPerimetre | null {
+  const ligne = db
+    .prepare(
+      'SELECT contenu FROM generation WHERE cadrage_id = ? AND point = ? AND genre = ?',
+    )
+    .get(cadrageId, INDEX_HORS_PERIMETRE, 'hors-perimetre') as
+    | { contenu: string }
+    | undefined;
+  if (!ligne) return null;
+
+  try {
+    const valeur = JSON.parse(ligne.contenu) as Partial<DecisionHorsPerimetre>;
+    const besoin = typeof valeur.besoin === 'string' ? valeur.besoin.trim() : '';
+    return valeur.afficher === true && besoin
+      ? { afficher: true, besoin }
+      : { afficher: false, besoin: '' };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -146,12 +184,37 @@ interface OuvertureBrute extends Ouverture {
 
 /**
  * Ce qui s'affiche à l'ouverture d'un point. La question elle-même est écrite
- * pour ce client : les huit intentions sont la structure du dossier, leur
+ * pour ce client : les huit intentions possibles structurent le dossier, leur
  * formulation ne l'est pas.
  */
 export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
-  const point = POINTS[index];
+  const pointReference = POINTS[index];
   const contexte = contexteDe(db, ligne);
+  if (pointReference.configurateur) {
+    return Promise.resolve({
+      valeur: {
+        question: pointReference.q,
+        relance: pointReference.hint,
+        propositions: pointReference.props,
+        choix: 'unique' as Choix,
+      },
+      // Il s'agit d'un écran de produit déterministe, pas d'un texte inventé
+      // pour le client. `repli` indique simplement qu'aucun modèle n'a tourné.
+      origine: 'repli' as const,
+    });
+  }
+  const decision =
+    index === INDEX_HORS_PERIMETRE
+      ? decisionHorsPerimetreStockee(db, ligne.id)
+      : null;
+  const point =
+    decision?.afficher && decision.besoin
+      ? {
+          ...pointReference,
+          intention: `${pointReference.intention} Le besoin relevé est : « ${decision.besoin} ».`,
+          q: `Vous avez évoqué « ${decision.besoin} » en plus de vos trois priorités. Pour la première version, faut-il l'intégrer, le reporter ou l'écarter ?`,
+        }
+      : pointReference;
 
   return obtenir<Ouverture>(
     db,
@@ -161,7 +224,9 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
     // Une fois écrite pour ce client, l'ouverture ne bouge plus : il doit
     // retrouver la même question en revenant sur le point. Le point de départ
     // entre dans la clé : il change la question, il doit la faire regénérer.
-    empreinte(`${ligne.client_metier}|${ligne.demande}|${ligne.maturite}`),
+    empreinte(
+      `${ligne.client_metier}|${ligne.demande}|${ligne.maturite}|${decision?.besoin ?? ''}`,
+    ),
     async () => {
       const combien = point.props.length > 3 ? 4 : 3;
       const { valeur } = await llm.generer<OuvertureBrute>(
@@ -174,14 +239,20 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
         question: valeur.question.trim() || point.q,
         relance: valeur.relance.trim() || point.hint,
         propositions: valeur.propositions,
-        choix: valeur.choix === 'multiple' ? ('multiple' as Choix) : ('unique' as Choix),
+        choix: point.selection
+          ? ('multiple' as Choix)
+          : point.conditionnel
+            ? ('unique' as Choix)
+            : valeur.choix === 'multiple'
+              ? ('multiple' as Choix)
+              : ('unique' as Choix),
       };
     },
     () => ({
       question: point.q,
       relance: point.hint,
       propositions: point.props,
-      choix: 'unique' as Choix,
+      choix: point.selection ? ('multiple' as Choix) : ('unique' as Choix),
     }),
   );
 }
@@ -189,13 +260,14 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
 /**
  * La question suivante sur un point, ou `null` quand il est établi.
  *
- * Le repli est `null` : un modèle absent ne doit jamais inventer une relance,
- * il ferme le point. Une question de plus coûte du temps au client, pas une
- * dégradation d'affichage.
+ * Même sans modèle, une relance de précision garantit les deux questions
+ * minimales. Au-delà, le repli ferme le point plutôt que d'inventer.
  */
 export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange[], rang: number) {
   const point = POINTS[index];
   const contexte = contexteDe(db, ligne);
+  const doitContinuer =
+    fil.filter((echange) => echange.reponse.trim()).length < QUESTIONS_MIN_PAR_POINT;
 
   return obtenir<Ouverture | null>(
     db,
@@ -206,13 +278,18 @@ export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange
     empreinte(fil.map((e) => `${e.question}|${e.reponse}`).join('||')),
     async () => {
       const { valeur } = await llm.generer<OuvertureBrute>(
-        promptSuite(contexte, point, fil, rang, RANG_MAX + 1 - rang),
+        promptSuite(contexte, point, fil, rang, doitContinuer),
         'suite',
         SCHEMA_OUVERTURE,
         { temperature: 0.3 },
       );
 
-      if (valeur.termine || !valeur.question.trim()) return null;
+      if (!valeur.question.trim()) {
+        return doitContinuer
+          ? relanceDePrecision(point, fil.map((echange) => echange.reponse))
+          : null;
+      }
+      if (valeur.termine && !doitContinuer) return null;
       return {
         question: valeur.question,
         relance: valeur.relance,
@@ -220,8 +297,84 @@ export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange
         choix: valeur.choix === 'multiple' ? ('multiple' as Choix) : ('unique' as Choix),
       };
     },
-    () => null,
+    () =>
+      doitContinuer
+        ? relanceDePrecision(point, fil.map((echange) => echange.reponse))
+        : null,
   );
+}
+
+// ---------------------------------------------------- hors périmètre ---- //
+
+const SCHEMA_HORS_PERIMETRE = llm.objet({
+  afficher: { type: 'boolean' },
+  besoin: llm.texte,
+});
+
+/**
+ * Le point VI n'existe que si un besoin supplémentaire a réellement été
+ * écrit. La décision est mise en cache, y compris sans modèle, car elle change
+ * la navigation et doit rester identique après un rechargement.
+ */
+export async function horsPerimetre(
+  db: Base,
+  ligne: LigneCadrage,
+  texteSupplementaire = '',
+) {
+  const base = contexteDe(db, ligne);
+  const ajout = texteSupplementaire.trim();
+  const briefDeBase = base.brief?.trim() ?? '';
+  const contexte: Contexte = ajout
+    ? {
+        ...base,
+        brief:
+          briefDeBase && ajout.includes(briefDeBase)
+            ? ajout
+            : [briefDeBase, ajout].filter(Boolean).join('\n\n'),
+      }
+    : base;
+  const cle = empreinte(
+    [
+      contexte.demande,
+      contexte.brief ?? '',
+      ...Object.entries(contexte.reponses)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([point, texte]) => `${point}:${texte}`),
+    ].join('||'),
+  );
+
+  const resultat = await obtenir<DecisionHorsPerimetre>(
+    db,
+    ligne.id,
+    INDEX_HORS_PERIMETRE,
+    'hors-perimetre',
+    cle,
+    async () => {
+      const { valeur } = await llm.generer<DecisionHorsPerimetre>(
+        promptDecisionHorsPerimetre(contexte),
+        'hors-perimetre',
+        SCHEMA_HORS_PERIMETRE,
+        { temperature: 0.1 },
+      );
+      const besoin = valeur.besoin.trim();
+      return valeur.afficher && besoin
+        ? { afficher: true, besoin }
+        : { afficher: false, besoin: '' };
+    },
+    () => ({ afficher: false, besoin: '' }),
+  );
+
+  if (resultat.origine === 'repli') {
+    ecrire(
+      db,
+      ligne.id,
+      INDEX_HORS_PERIMETRE,
+      'hors-perimetre',
+      cle,
+      resultat.valeur,
+    );
+  }
+  return resultat;
 }
 
 // -------------------------------------------------------------------- aide --
@@ -317,9 +470,13 @@ export function tension(db: Base, ligne: LigneCadrage, index: number, reponse: s
         optionB: valeur.optionB,
       };
     },
-    // Repli : la règle en dur de la maquette, une égalité de chaîne.
+    // Repli : la règle en dur de la maquette, recherchée dans chaque ligne du
+    // fil puisque certaines réponses, comme le périmètre, sont multiples.
     () =>
-      point.tensionOn !== undefined && reponse === point.props[point.tensionOn]
+      point.tensionOn !== undefined &&
+      reponse
+        .split('\n')
+        .some((ligne) => ligne.trim() === point.props[point.tensionOn!])
         ? {
             explication:
               "Vous m'avez dit que vos clients ne sont pas à l'aise avec les applications. Là, vous mettez au cœur du projet la saisie des charges à chaque série, par eux. Les deux peuvent tenir, mais il faut savoir ce qui compte le plus — ça change ce qu'on construit.",

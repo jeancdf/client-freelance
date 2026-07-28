@@ -1,7 +1,13 @@
 import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
 import { POINTS } from '../../shared/points';
-import { answerOf, pointDeReprise, pointsEcrits, type State } from '../state';
+import {
+  answerOf,
+  indicesPointsVisibles,
+  pointDeReprise,
+  pointsEcrits,
+  type State,
+} from '../state';
 import { depuis } from '../lib/dates';
 
 const RANGS = [
@@ -47,7 +53,7 @@ function contenu(state: State): typeof DEMO {
   if (!session) return DEMO;
 
   const ecrits = pointsEcrits(state);
-  const reste = POINTS.length - ecrits.length;
+  const reste = indicesPointsVisibles(state).length - ecrits.length;
   const index = pointDeReprise(state);
   const dernier = ecrits.length ? ecrits[ecrits.length - 1] : null;
 

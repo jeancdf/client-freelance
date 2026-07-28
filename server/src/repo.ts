@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { POINTS } from '../../shared/points.ts';
 import type {
   CreationCadrage,
+  DecisionHorsPerimetre,
   Echange,
   Maturite,
   Fichier,
@@ -15,6 +15,7 @@ import type {
   Statut,
   Voie,
 } from '../../shared/api.ts';
+import { INDEX_HORS_PERIMETRE, INDEX_PERIMETRE, POINTS } from '../../shared/points.ts';
 import type { Base } from './db.ts';
 
 /** Au-delà, on considère que le client a quitté : le temps ne compte plus. */
@@ -155,6 +156,32 @@ function generations(db: Base, cadrageId: string, genre: string): Record<string,
   return par;
 }
 
+/** La décision conditionnelle qui fait exister, ou non, le point VI. */
+function decisionHorsPerimetre(
+  db: Base,
+  cadrageId: string,
+): DecisionHorsPerimetre | null {
+  const ligne = db
+    .prepare(
+      'SELECT contenu FROM generation WHERE cadrage_id = ? AND point = ? AND genre = ?',
+    )
+    .get(cadrageId, INDEX_HORS_PERIMETRE, 'hors-perimetre') as
+    | { contenu: string }
+    | undefined;
+  if (!ligne) return null;
+
+  try {
+    const valeur = JSON.parse(ligne.contenu) as Partial<DecisionHorsPerimetre>;
+    if (typeof valeur.afficher !== 'boolean') return null;
+    return {
+      afficher: valeur.afficher,
+      besoin: typeof valeur.besoin === 'string' ? valeur.besoin : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Assemble l'état complet envoyé au navigateur à l'ouverture du lien. */
 export function session(db: Base, ligne: LigneBase): Session {
   const reponses: Record<string, Reponse> = {};
@@ -189,6 +216,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     dureeMs: ligne.duree_ms,
     reformulations: generations(db, ligne.id, 'reformulation'),
     deductions: generations(db, ligne.id, 'deduction'),
+    horsPerimetre: decisionHorsPerimetre(db, ligne.id),
   };
 }
 
@@ -386,9 +414,6 @@ export function marquerReponse(
   };
 }
 
-/** Le plafond : trois questions par point, quoi qu'en dise le modèle. */
-export const RANG_MAX = 2;
-
 /**
  * Écrit une réponse dans le fil d'un point, puis recompose la réponse retenue
  * au dossier : les réponses du fil, dans l'ordre, une par ligne. Tout ce qui
@@ -406,8 +431,8 @@ export function ecrireEchange(
   if (!Number.isInteger(point) || point < 0 || point >= POINTS.length) {
     throw new ErreurRequete(404, 'point inconnu');
   }
-  if (!Number.isInteger(rang) || rang < 0 || rang > RANG_MAX) {
-    throw new ErreurRequete(400, `rang doit être un entier entre 0 et ${RANG_MAX}`);
+  if (!Number.isSafeInteger(rang) || rang < 0) {
+    throw new ErreurRequete(400, 'rang doit être un entier positif');
   }
   if (typeof entree.texte !== 'string' || !entree.texte.trim()) {
     throw new ErreurRequete(400, 'La réponse ne peut pas être vide.');
@@ -507,7 +532,12 @@ function tensionOuverte(reponses: LigneReponse[]): boolean {
   return reponses.some((r) => {
     const point = POINTS[r.point];
     if (point?.tensionOn === undefined) return false;
-    return r.texte === point.props[point.tensionOn] && r.arbitre === 0;
+    return (
+      r.texte
+        .split('\n')
+        .some((ligne) => ligne.trim() === point.props[point.tensionOn!]) &&
+      r.arbitre === 0
+    );
   });
 }
 
@@ -517,9 +547,19 @@ export function lister(db: Base): { stats: StatsCadrages; cadrages: LigneCadrage
   const cadrages: LigneCadrage[] = lignes.map((ligne) => {
     const reponses = reponsesDe(db, ligne.id);
     const repondus = new Set(reponses.map((r) => r.point));
-    // Le point en cours est le premier trou dans la suite des huit points.
+    const decision = decisionHorsPerimetre(db, ligne.id);
+    const horsPerimetreIgnore =
+      decision?.afficher === false ||
+      (decision === null &&
+        repondus.has(INDEX_PERIMETRE) &&
+        !repondus.has(INDEX_HORS_PERIMETRE));
+    const visibles = POINTS.map((_, index) => index).filter(
+      (index) => index !== INDEX_HORS_PERIMETRE || !horsPerimetreIgnore,
+    );
+
+    // Le point en cours est le premier trou parmi les points réellement utiles.
     let enCours: number | null = null;
-    for (let i = 0; i < POINTS.length; i++) {
+    for (const i of visibles) {
       if (!repondus.has(i)) {
         enCours = i;
         break;
@@ -533,7 +573,12 @@ export function lister(db: Base): { stats: StatsCadrages; cadrages: LigneCadrage
       voie: ligne.voie as Voie,
       mode: ligne.mode as Mode,
       statut: ligne.statut as Statut,
-      couverture: repondus.size,
+      // Un point conditionnel ignoré est couvert sans réponse : il ne doit pas
+      // empêcher un dossier complet d'atteindre 100 %.
+      couverture:
+        repondus.size -
+        (horsPerimetreIgnore && repondus.has(INDEX_HORS_PERIMETRE) ? 1 : 0) +
+        (horsPerimetreIgnore ? 1 : 0),
       enCours: ligne.statut === 'valide' ? null : enCours,
       tensionOuverte: tensionOuverte(reponses),
       maturite: ligne.maturite as Maturite | '',

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
-import { POINTS } from '../../shared/points';
+import { INDEX_HORS_PERIMETRE, POINTS } from '../../shared/points';
 import * as api from '../lib/api';
 
 /**
@@ -105,9 +105,9 @@ export function Landing() {
           </p>
 
           <div className="landing__points">
-            <p className="lbl landing__points-label">Les huit points parcourus</p>
+            <p className="lbl landing__points-label">Les points toujours parcourus</p>
             <ol className="landing__points-list">
-              {POINTS.map((point) => (
+              {POINTS.filter((_, index) => index !== INDEX_HORS_PERIMETRE).map((point) => (
                 <li key={point.num} className="landing__point">
                   <span className="landing__point-num">{point.num}</span>
                   <span className="landing__point-label">{point.label}</span>
