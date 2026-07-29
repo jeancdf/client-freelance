@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
-import { INDEX_HORS_PERIMETRE, POINTS } from '../../shared/points';
 import * as api from '../lib/api';
 
 /**
@@ -22,30 +21,40 @@ interface Champ {
   type?: string;
   lignes?: number;
   exemple: string;
+  autocomplete?: string;
 }
 
 const CHAMPS: Champ[] = [
-  { cle: 'nom', libelle: 'Votre nom', aide: '', exemple: 'Camille Dorval' },
   {
-    cle: 'courriel',
-    libelle: 'Votre adresse',
-    aide: "Pour vous retrouver, et pour que Nicolas vous réponde.",
-    type: 'email',
-    exemple: 'camille@atelier-dorval.fr',
+    cle: 'demande',
+    libelle: 'Votre projet, en quelques mots',
+    aide:
+      "Décrivez le problème à régler ou le résultat recherché. Vous n'avez pas besoin de connaître déjà la bonne façon de le construire.",
+    lignes: 5,
+    exemple:
+      "Je reçois des demandes pendant mes interventions et j'en oublie certaines avant de pouvoir rappeler.",
   },
   {
     cle: 'metier',
     libelle: 'Votre activité',
-    aide: "C'est elle qui décide des questions posées.",
-    exemple: 'Menuisier agenceur, six salariés',
+    aide: 'Elle permet d’adapter les questions à votre quotidien réel.',
+    exemple: 'Plombier indépendant, cabinet de conseil, association…',
+    autocomplete: 'organization-title',
   },
   {
-    cle: 'demande',
-    libelle: 'Ce que vous cherchez à faire',
-    aide: 'Deux ou trois phrases suffisent. On creusera après.',
-    lignes: 4,
-    exemple:
-      "Je perds des chantiers parce que les clients ne voient jamais mon travail, et je réponds trop tard aux demandes de devis.",
+    cle: 'nom',
+    libelle: 'Votre nom',
+    aide: '',
+    exemple: 'Camille Dorval',
+    autocomplete: 'name',
+  },
+  {
+    cle: 'courriel',
+    libelle: 'Votre adresse e-mail',
+    aide: 'Pour que Nicolas puisse vous répondre au sujet de ce projet.',
+    type: 'email',
+    exemple: 'camille@atelier-dorval.fr',
+    autocomplete: 'email',
   },
 ];
 
@@ -56,12 +65,6 @@ export function Landing() {
   const [valeurs, setValeurs] = useState(VIDE);
   const [etat, setEtat] = useState<'repos' | 'envoi'>('repos');
   const [erreur, setErreur] = useState<string | null>(null);
-  const [accesPrestataire, setAccesPrestataire] = useState(0);
-
-  function coulisserVersPrestataire(valeur: number): void {
-    setAccesPrestataire(valeur);
-    if (valeur >= 94) window.location.assign('/prestataire');
-  }
 
   /**
    * Ouvre le cadrage et entre dans la première question sans rien demander de
@@ -88,91 +91,94 @@ export function Landing() {
   }
 
   return (
-    <main className="page">
+    <main className="page page--landing">
       <SiteHeader />
 
-      <div className="landing__grid">
+      <section className="landing__grid" aria-labelledby="landing-title">
         <div className="landing__intro">
-          <p className="lbl landing__kicker">Studio Cazals · cadrage de projet</p>
-          <h1 className="serif landing__title">
-            Dites-moi ce que vous voulez construire.
-            <br />
-            Vous repartez avec le dossier qui sert à le chiffrer.
+          <p className="lbl landing__kicker">Cadrage avant devis</p>
+          <h1 id="landing-title" className="serif landing__title">
+            Dites-moi ce que vous voulez construire. Vous repartez avec le dossier qui sert à le
+            chiffrer.
           </h1>
           <p className="landing__lead">
-            Un entretien écrit, seul, à votre rythme. Une question à la fois, adaptée à votre
-            métier : vous répondez avec vos mots, ou vous choisissez parmi des réponses déjà
-            rédigées et vous les corrigez.
-          </p>
-          <p className="landing__lead">
-            À la fin, vous relisez tout. Ce que vous avez dit, ce que j'ai reformulé et que vous
-            avez validé, ce que j'ai déduit sans vous le demander : les trois sont distingués, pour
-            que rien ne passe pour votre parole sans l'être.
+            Vous racontez votre projet avec vos mots. Je transforme cet échange en un cadrage
+            lisible : ce qu’il faut construire, ce qui attendra et les décisions à prendre avant
+            un devis.
           </p>
 
-          <div className="landing__points">
-            <p className="lbl landing__points-label">Les points toujours parcourus</p>
-            <ol className="landing__points-list">
-              {POINTS.filter((_, index) => index !== INDEX_HORS_PERIMETRE).map((point) => (
-                <li key={point.num} className="landing__point">
-                  <span className="landing__point-num">{point.num}</span>
-                  <span className="landing__point-label">{point.label}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className="landing__faits">
-            <p className="landing__fait">
-              <strong>À votre rythme.</strong> Une question à la fois, et je ne rebondis que
-              quand ça change le chiffrage. Vous pouvez vous arrêter et reprendre : le lien vous
-              ramène là où vous en étiez, depuis n'importe quel appareil.
-            </p>
-            <p className="landing__fait">
-              <strong>Aucun compte à créer.</strong> Votre lien est votre dossier. Personne d'autre
-              ne le lit que Nicolas.
-            </p>
-            <p className="landing__fait">
-              <strong>Sans engagement.</strong> Le dossier vous appartient. S'il ne va pas plus
-              loin avec moi, il servira au prestataire que vous choisirez.
-            </p>
-          </div>
+          <ul className="landing__signaux" aria-label="Les garanties de l’entretien">
+            <li>Une question à la fois</li>
+            <li>Aucun compte à créer</li>
+            <li>Reprise à tout moment</li>
+          </ul>
         </div>
 
         <aside className="landing__aside">
-          <form className="landing__form" onSubmit={(e) => void ouvrir(e)}>
-            <p className="lbl landing__form-kicker">Commencer</p>
-            <h2 className="serif landing__form-title">Quatre champs, puis on y va.</h2>
+          <form
+            className="landing__form"
+            onSubmit={(e) => void ouvrir(e)}
+            aria-busy={etat === 'envoi'}
+          >
+            <div className="landing__form-head">
+              <p className="lbl landing__form-kicker">Votre point de départ</p>
+              <h2 className="serif landing__form-title">Parlez-moi de votre projet.</h2>
+              <p className="landing__form-intro">
+                Ces quelques repères servent à écrire une première question vraiment adaptée à
+                votre situation.
+              </p>
+            </div>
 
-            {CHAMPS.map((champ) => (
-              <div key={champ.cle} className="landing__champ">
-                <label htmlFor={champ.cle} className="landing__label">
-                  {champ.libelle}
-                </label>
-                {champ.aide && <p className="note landing__aide">{champ.aide}</p>}
-                {champ.lignes ? (
-                  <textarea
-                    id={champ.cle}
-                    required
-                    rows={champ.lignes}
-                    className="landing__input"
-                    placeholder={champ.exemple}
-                    value={valeurs[champ.cle]}
-                    onChange={(e) => setValeurs((v) => ({ ...v, [champ.cle]: e.target.value }))}
-                  />
-                ) : (
-                  <input
-                    id={champ.cle}
-                    required
-                    type={champ.type ?? 'text'}
-                    className="landing__input"
-                    placeholder={champ.exemple}
-                    value={valeurs[champ.cle]}
-                    onChange={(e) => setValeurs((v) => ({ ...v, [champ.cle]: e.target.value }))}
-                  />
-                )}
-              </div>
-            ))}
+            <div className="landing__fields">
+              {CHAMPS.map((champ) => {
+                const aideId = champ.aide ? `${champ.cle}-aide` : undefined;
+                return (
+                  <div
+                    key={champ.cle}
+                    className={`landing__champ landing__champ--${champ.cle}`}
+                  >
+                    <label htmlFor={champ.cle} className="landing__label">
+                      {champ.libelle}
+                    </label>
+                    {champ.aide && (
+                      <p id={aideId} className="landing__aide">
+                        {champ.aide}
+                      </p>
+                    )}
+                    {champ.lignes ? (
+                      <textarea
+                        id={champ.cle}
+                        name={champ.cle}
+                        required
+                        rows={champ.lignes}
+                        className="landing__input"
+                        placeholder={champ.exemple}
+                        aria-describedby={aideId}
+                        value={valeurs[champ.cle]}
+                        onChange={(e) =>
+                          setValeurs((v) => ({ ...v, [champ.cle]: e.target.value }))
+                        }
+                      />
+                    ) : (
+                      <input
+                        id={champ.cle}
+                        name={champ.cle}
+                        required
+                        type={champ.type ?? 'text'}
+                        autoComplete={champ.autocomplete}
+                        className="landing__input"
+                        placeholder={champ.exemple}
+                        aria-describedby={aideId}
+                        value={valeurs[champ.cle]}
+                        onChange={(e) =>
+                          setValeurs((v) => ({ ...v, [champ.cle]: e.target.value }))
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             {erreur && (
               <p className="landing__erreur" role="alert">
@@ -185,42 +191,112 @@ export function Landing() {
               className="btn btn--primary landing__submit"
               disabled={etat === 'envoi'}
             >
-              {etat === 'envoi' ? 'J’ouvre votre dossier…' : 'Commencer'}
+              {etat === 'envoi' ? 'J’ouvre votre dossier…' : 'Ouvrir mon dossier de cadrage'}
             </button>
 
-            <p className="note landing__meta">
-              à votre rythme · aucun compte · votre lien apparaît dans la barre d'adresse et vous
-              ramènera ici
+            <p className="landing__meta">
+              Après l’envoi, votre lien privé reste dans la barre d’adresse. Il permet
+              d’interrompre l’entretien et de le reprendre plus tard.
             </p>
           </form>
         </aside>
-      </div>
+      </section>
+
+      <section className="landing__livrable" aria-labelledby="livrable-title">
+        <div className="landing__section-head">
+          <p className="lbl landing__section-kicker">Ce que vous obtenez</p>
+          <div>
+            <h2 id="livrable-title" className="serif landing__section-title">
+              Un dossier qui permet de décider, pas un résumé automatique.
+            </h2>
+            <p className="landing__section-lead">
+              Vos réponses deviennent un document lisible avant le rendez-vous. Les décisions
+              prises, les hypothèses et les points encore ouverts restent clairement séparés.
+            </p>
+          </div>
+        </div>
+
+        <div className="landing__resultats">
+          <article className="landing__resultat">
+            <span className="landing__resultat-num">01</span>
+            <h3 className="serif">Le cœur du projet</h3>
+            <p>
+              Les actions indispensables sont isolées et classées pour donner une base claire au
+              premier devis.
+            </p>
+          </article>
+          <article className="landing__resultat">
+            <span className="landing__resultat-num">02</span>
+            <h3 className="serif">Ses limites</h3>
+            <p>
+              Ce qui entre dans la première version, ce qui attendra et ce qui est écarté sont
+              écrits noir sur blanc.
+            </p>
+          </article>
+          <article className="landing__resultat">
+            <span className="landing__resultat-num">03</span>
+            <h3 className="serif">Les conditions du devis</h3>
+            <p>
+              Utilisateurs, éléments existants, contraintes et critères de réussite sont réunis
+              sans masquer les incertitudes.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section className="landing__deroulement" aria-labelledby="deroulement-title">
+        <div className="landing__deroulement-intro">
+          <p className="lbl landing__section-kicker">Comment cela se passe</p>
+          <h2 id="deroulement-title" className="serif landing__section-title">
+            Vous avancez sans préparer un cahier des charges.
+          </h2>
+        </div>
+
+        <ol className="landing__etapes">
+          <li className="landing__etape">
+            <span>01</span>
+            <div>
+              <h3>Vous racontez</h3>
+              <p>
+                Une question à la fois, avec vos mots ou à partir de propositions que vous pouvez
+                corriger.
+              </p>
+            </div>
+          </li>
+          <li className="landing__etape">
+            <span>02</span>
+            <div>
+              <h3>Je précise seulement ce qui compte</h3>
+              <p>
+                Une relance n’apparaît que si la réponse peut réellement changer le périmètre ou
+                le chiffrage.
+              </p>
+            </div>
+          </li>
+          <li className="landing__etape">
+            <span>03</span>
+            <div>
+              <h3>Vous relisez avant de transmettre</h3>
+              <p>
+                Rien n’est présenté comme votre parole sans que vous puissiez le relire et le
+                corriger.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <aside className="landing__liberte">
+        <p className="lbl landing__liberte-kicker">Le dossier reste le vôtre</p>
+        <p className="serif landing__liberte-texte">
+          Si le projet ne continue pas avec Studio Cazals, ce cadrage pourra servir au prestataire
+          que vous choisirez.
+        </p>
+      </aside>
 
       <footer className="accueil__footer">
         <span>Nicolas Cazals — développement sur mesure</span>
-        <span>nicolas@studiocazals.fr</span>
-        <div className="landing__prestataire">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={accesPrestataire}
-            className="landing__prestataire-slider"
-            aria-label="Faire glisser l’étoile pour ouvrir l’espace prestataire"
-            aria-valuetext={
-              accesPrestataire >= 94
-                ? 'Ouverture de l’espace prestataire'
-                : 'Faire glisser l’étoile vers la droite'
-            }
-            title="Faire glisser l’étoile"
-            onChange={(event) =>
-              coulisserVersPrestataire(Number(event.target.value))
-            }
-            onPointerUp={() => {
-              if (accesPrestataire < 94) setAccesPrestataire(0);
-            }}
-          />
-        </div>
+        <a href="mailto:nicolas@studiocazals.fr">nicolas@studiocazals.fr</a>
       </footer>
     </main>
   );
