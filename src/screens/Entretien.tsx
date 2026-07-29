@@ -9,7 +9,6 @@ import {
   type ConfigurationContraintes,
 } from '../../shared/points';
 import {
-  answerOf,
   currentIndex,
   echangeCourant,
   indicesPointsVisibles,
@@ -191,10 +190,6 @@ export function Entretien() {
 
   const isDone = (k: number) => state.answers[k] !== undefined;
 
-  // Les points déjà écrits, avant celui en cours : le « dossier » consultable.
-  const answeredBefore = pointsVisibles.filter((k) => k < index && isDone(k));
-  const last = answeredBefore.length ? answeredBefore[answeredBefore.length - 1] : null;
-
   const draft = state.draft.trim();
 
   // Le contenu écrit pour CE client, celui de la maquette sinon : l'entretien
@@ -357,36 +352,6 @@ export function Entretien() {
                   Les deux, j'explique
                 </button>
               </div>
-            </div>
-          )}
-
-          {last !== null && (
-            <div className="prev">
-              <p className="lbl prev__label">
-                {POINTS[last].num} — {POINTS[last].label} · vos mots
-              </p>
-              <p className="quote prev__quote">« {answerOf(state, last)} »</p>
-              <button
-                type="button"
-                className="btn--accent"
-                onClick={() => dispatch({ type: 'toggleDossier' })}
-              >
-                Relire le dossier — {answeredBefore.length}{' '}
-                {answeredBefore.length > 1 ? 'points écrits' : 'point écrit'}
-              </button>
-
-              {state.dossierOpen && (
-                <div className="prev__dossier">
-                  {answeredBefore.map((k) => (
-                    <div key={POINTS[k].num}>
-                      <p className="lbl prev__label">
-                        {POINTS[k].num} — {POINTS[k].label} · vos mots
-                      </p>
-                      <p className="quote prev__quote">« {answerOf(state, k)} »</p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 

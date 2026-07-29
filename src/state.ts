@@ -74,7 +74,6 @@ export interface State {
   clos: Record<number, boolean>;
   help: boolean;
   tension: boolean;
-  dossierOpen: boolean;
   planOpen: boolean;
   /** Réponse en cours de saisie, avant validation du point. */
   draft: string;
@@ -132,7 +131,6 @@ export const initialState: State = {
   clos: {},
   help: false,
   tension: false,
-  dossierOpen: false,
   planOpen: false,
   draft: '',
   drafts: {},
@@ -193,7 +191,6 @@ export type Action =
   | { type: 'tensionKeep' }
   | { type: 'confirmReform' }
   | { type: 'rejectReform' }
-  | { type: 'toggleDossier' }
   | { type: 'togglePlan' }
   | { type: 'switchCourt' }
   | { type: 'goScreen'; screen: Screen }
@@ -448,7 +445,6 @@ function goQuestion(
     tensionCourante: null,
     reformulation: null,
     occupe: false,
-    dossierOpen: false,
     drafts,
     draft: drafts[cleCible] ?? reponseDeQuestion(state, cible, rangCible),
     scrollTick: state.scrollTick + 1,
@@ -731,7 +727,6 @@ export function reducer(state: State, action: Action): State {
         clos: {},
         echanges: {},
         horsPerimetre: null,
-        dossierOpen: false,
       });
 
     case 'replay':
@@ -748,7 +743,6 @@ export function reducer(state: State, action: Action): State {
         clos: {},
         echanges: {},
         horsPerimetre: null,
-        dossierOpen: false,
       });
 
     case 'goStep':
@@ -941,9 +935,6 @@ export function reducer(state: State, action: Action): State {
 
     case 'rejectReform':
       return goQuestion(state, i, dernierRangRepondu(state, i) ?? 0);
-
-    case 'toggleDossier':
-      return { ...state, dossierOpen: !state.dossierOpen };
 
     case 'togglePlan':
       return { ...state, planOpen: !state.planOpen };

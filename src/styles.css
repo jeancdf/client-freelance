@@ -65,7 +65,7 @@
   :root {
     --pad: 52px;
     --rail: block;
-    --railcol: 196px minmax(0, 1fr);
+    --railcol: 180px minmax(0, 1fr);
     --mob: none;
     --qsize: 42px;
     --h1: 52px;
@@ -971,12 +971,12 @@ textarea.landing__input {
 /* ------------------------------------------------------------- entretien -- */
 
 .entretien__main {
-  max-width: 1440px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 0 var(--pad);
+  padding: 0 clamp(20px, 3vw, 44px);
   display: grid;
   grid-template-columns: var(--railcol);
-  gap: 0 44px;
+  gap: 0 36px;
   align-items: start;
 }
 
@@ -1047,7 +1047,7 @@ textarea.landing__input {
 .entretien__col {
   padding: 26px 0 0;
   width: 100%;
-  max-width: 900px;
+  max-width: 1180px;
 }
 
 /* Repère d'avancement mobile, en remplacement du sommaire. */
@@ -1121,38 +1121,6 @@ textarea.landing__input {
   font-size: 14.5px;
 }
 
-/* Rappel de la réponse précédente, pour ancrer la question en cours. */
-.prev {
-  border-left: 1px solid var(--rule);
-  padding: 0 0 0 16px;
-  margin: 0 0 34px;
-}
-
-.prev__label {
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  margin: 0 0 7px;
-}
-
-.prev__quote {
-  font-size: 17px;
-  line-height: 1.5;
-  margin: 0 0 10px;
-}
-
-.prev__dossier .prev__quote {
-  margin-bottom: 0;
-}
-
-.prev__dossier {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule-soft);
-  display: grid;
-  gap: 16px;
-  animation: fade 0.3s ease-out both;
-}
-
 .question-turn {
   animation: question-turn-in 0.52s cubic-bezier(0.2, 0.75, 0.25, 1) both;
   scroll-margin-top: 96px;
@@ -1199,7 +1167,7 @@ textarea.landing__input {
   line-height: 1.16;
   letter-spacing: -0.012em;
   margin: 0 0 16px;
-  max-width: 34ch;
+  max-width: none;
 }
 
 .question__hint {
@@ -1209,7 +1177,7 @@ textarea.landing__input {
   line-height: 1.55;
   color: var(--ink-45);
   margin: 0 0 26px;
-  max-width: 44ch;
+  max-width: 64ch;
 }
 
 .props {
