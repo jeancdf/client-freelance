@@ -83,10 +83,6 @@ export function Inscription() {
           <h1 id="inscription-title" className="serif inscription__title">
             Commençons par votre situation.
           </h1>
-          <p className="inscription__lead">
-            Quatre renseignements suffisent pour écrire une première question pertinente. Vous
-            pourrez ensuite avancer à votre rythme et reprendre l’entretien avec votre lien privé.
-          </p>
         </header>
 
         <form

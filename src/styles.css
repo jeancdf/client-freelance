@@ -865,19 +865,19 @@ textarea.landing__input {
 .inscription__shell {
   max-width: 900px;
   margin: 0 auto;
-  padding: clamp(42px, 8vh, 88px) 0 0;
+  padding: clamp(22px, 4vh, 40px) 0 0;
 }
 
 .inscription__head {
   max-width: 760px;
-  margin-bottom: clamp(32px, 5vw, 48px);
+  margin-bottom: clamp(20px, 3vw, 28px);
 }
 
 .inscription__retour {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: clamp(34px, 6vw, 58px);
+  margin-bottom: clamp(18px, 3vw, 28px);
   border-bottom-color: var(--rule);
   color: var(--ink-45);
   font-size: 13px;
@@ -888,25 +888,16 @@ textarea.landing__input {
 }
 
 .inscription__kicker {
-  margin: 0 0 18px;
+  margin: 0 0 10px;
   font-size: 10.5px;
   letter-spacing: 0.17em;
 }
 
 .inscription__title {
-  max-width: 20ch;
-  margin: 0 0 18px;
-  font-size: clamp(40px, 5.4vw, 62px);
-  line-height: 1.06;
-  letter-spacing: -0.024em;
-}
-
-.inscription__lead {
-  max-width: 61ch;
   margin: 0;
-  color: var(--ink-70);
-  font-size: 17.5px;
-  line-height: 1.62;
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -0.018em;
 }
 
 .inscription__form {
