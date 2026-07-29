@@ -1155,6 +1155,81 @@ textarea.landing__input {
   cursor: wait;
 }
 
+/* Confirmation intégrée quand une correction invalide la suite du fil. */
+.correction-modal {
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: var(--paper-2);
+  color: var(--ink);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.28);
+}
+
+.correction-modal[open] {
+  animation: rise 0.25s ease-out both;
+}
+
+.correction-modal::backdrop {
+  background: rgb(16 15 12 / 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.correction-modal__body {
+  padding: 28px 30px 24px;
+}
+
+.correction-modal__kicker {
+  margin: 0 0 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+}
+
+.correction-modal__title {
+  margin: 0 0 14px;
+  font-size: clamp(25px, 4vw, 32px);
+  line-height: 1.18;
+}
+
+.correction-modal__text {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--ink-70);
+  font-size: 16.5px;
+  line-height: 1.58;
+}
+
+.correction-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 30px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.correction-modal__button {
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+
+@media (max-width: 520px) {
+  .correction-modal__body {
+    padding: 24px 20px 20px;
+  }
+
+  .correction-modal__actions {
+    display: grid;
+    padding: 14px 20px 20px;
+  }
+}
+
 .question__header {
   font-size: 11px;
   letter-spacing: 0.18em;

@@ -92,8 +92,8 @@ Formulation de référence, écrite pour un autre client : « ${point.q} »
 Relance de référence : « ${point.hint} »
 
 Écris pour CE client :
-1. La question, reformulée avec son vocabulaire et ses réalités de métier. Elle doit chercher exactement la même chose que la référence, sans élargir ni rétrécir.
-2. La relance, une phrase, qui dit quoi raconter quand on ne sait pas par où commencer.
+1. La question, reformulée avec son vocabulaire et ses réalités de métier. Elle tient en une phrase directe de 16 mots maximum et cherche exactement la même chose que la référence, sans élargir ni rétrécir.
+2. La relance, sous la question, en deux phrases courtes et 25 à 45 mots au total. La première dit quoi raconter quand on ne sait pas par où commencer. La seconde explique concrètement pourquoi cette information compte pour le projet ou le devis.
 3. ${combien} réponses probables, à la première personne, telles que LUI les formulerait à l'oral.
 4. "choix" : "multiple" si plusieurs de ces réponses peuvent être vraies chez lui en même temps (des utilisateurs ou des contraintes cumulables), "unique" si la question demande de trancher une seule chose.
 
@@ -101,6 +101,7 @@ Réponds "termine": false : au premier tour, on pose toujours la question.
 
 Contraintes :
 - La question et la relance vouvoient le client. Elles portent sur du concret : pas de "votre besoin", pas de "votre problématique". La question se termine par un point d'interrogation.
+- La question ne contient ni préambule ni explication : toute précision utile va dans la relance.
 - Les réponses font une à deux phrases, nettement différentes les unes des autres : pas trois nuances de la même.
 - Aucune ne contredit ce qu'il a déjà écrit.
 - N'utilise pas le mot "solution" ni le mot "outil" en début de phrase.`,
@@ -133,7 +134,7 @@ Pour cette deuxième question, ne cherche aucune autre information. Demande au c
 - "Priorité 2 — à traiter ensuite"
 - "Priorité 3 — cruciale pour le projet"
 
-Explique en une phrase que la troisième priorité reste cruciale : le classement indique l'ordre d'attention, jamais qu'un élément serait facultatif. Chaque proposition doit être un classement complet des trois éléments et "choix" doit valoir "unique".`
+Explique dans la relance, en deux phrases courtes, que la troisième priorité reste cruciale : le classement indique l'ordre d'attention, jamais qu'un élément serait facultatif. Chaque proposition doit être un classement complet des trois éléments et "choix" doit valoir "unique".`
       : '';
   const consigneContraintes =
     point.configurateur === 'contraintes'
@@ -189,9 +190,10 @@ N'en pose PAS pour :
 - demander quelque chose qu'un autre point demandera de toute façon.
 
 Si tu poses la question ${rang + 1} :
-- elle part de SES mots, et se répond en une phrase ;
+- elle part de SES mots, tient en une phrase directe de 16 mots maximum et se répond en une phrase ;
+- elle ne contient ni préambule ni explication ;
 - elle ne redemande rien de ce qui est écrit plus haut ;
-- "relance" dit en une phrase pourquoi ça compte pour le projet ;
+- "relance" contient deux phrases courtes et 25 à 45 mots au total : la première aide à savoir quoi raconter, la seconde dit concrètement pourquoi ça compte pour le projet ou le devis ;
 - deux à quatre réponses probables, à la première personne, tirées de ce qu'il vient de raconter ;
 - "choix" : "multiple" si plusieurs peuvent être vraies chez lui à la fois, "unique" sinon.`,
     },

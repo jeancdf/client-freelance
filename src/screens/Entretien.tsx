@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCadrage } from '../CadrageContext';
 import { AppHeader } from '../components/Headers';
 import { Attente } from '../components/Attente';
@@ -31,6 +31,70 @@ const MAQUETTE_TENSION = {
   optionA: "La simplicité passe d'abord",
   optionB: "Le suivi des charges passe d'abord",
 };
+
+function ConfirmationCorrection({
+  ouverte,
+  nombre,
+  annuler,
+  confirmer,
+}: {
+  ouverte: boolean;
+  nombre: number;
+  annuler: () => void;
+  confirmer: () => void;
+}) {
+  const dialogueRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialogue = dialogueRef.current;
+    if (!dialogue) return;
+    if (ouverte && !dialogue.open) dialogue.showModal();
+    if (!ouverte && dialogue.open) dialogue.close();
+  }, [ouverte]);
+
+  return (
+    <dialog
+      ref={dialogueRef}
+      className="correction-modal"
+      aria-labelledby="correction-modal-title"
+      aria-describedby="correction-modal-description"
+      onCancel={annuler}
+      onClose={annuler}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) annuler();
+      }}
+    >
+      <div className="correction-modal__body">
+        <p className="lbl correction-modal__kicker">Correction d’une réponse</p>
+        <h2 id="correction-modal-title" className="serif correction-modal__title">
+          Adapter les questions suivantes ?
+        </h2>
+        <p id="correction-modal-description" className="correction-modal__text">
+          Cette correction supprimera {nombre}{' '}
+          {nombre > 1 ? 'réponses suivantes' : 'réponse suivante'} de ce point.
+          L’IA adaptera ensuite ses questions à votre nouvelle réponse.
+        </p>
+      </div>
+      <div className="correction-modal__actions">
+        <button
+          type="button"
+          className="btn btn--outline correction-modal__button"
+          onClick={annuler}
+          autoFocus
+        >
+          Annuler
+        </button>
+        <button
+          type="button"
+          className="btn btn--primary correction-modal__button"
+          onClick={confirmer}
+        >
+          Adapter les questions
+        </button>
+      </div>
+    </dialog>
+  );
+}
 
 function ConfigurateurContraintes({
   configuration,
@@ -152,6 +216,7 @@ function ConfigurateurContraintes({
 export function Entretien() {
   const { state, dispatch, entretien } = useCadrage();
   const questionRef = useRef<HTMLDivElement>(null);
+  const [confirmationOuverte, setConfirmationOuverte] = useState(false);
   const index = currentIndex(state);
   const point = POINTS[index];
   const pointsVisibles = indicesPointsVisibles(state);
@@ -239,15 +304,8 @@ export function Entretien() {
       return;
     }
 
-    if (
-      reponseModifiee &&
-      reponsesInvalidees > 0 &&
-      !window.confirm(
-        `Cette correction supprimera ${reponsesInvalidees} ${
-          reponsesInvalidees > 1 ? 'réponses suivantes' : 'réponse suivante'
-        } de ce point. L’IA adaptera ensuite ses questions à votre nouvelle réponse. Continuer ?`,
-      )
-    ) {
+    if (reponseModifiee && reponsesInvalidees > 0) {
+      setConfirmationOuverte(true);
       return;
     }
 
@@ -598,6 +656,15 @@ export function Entretien() {
           </div>
         </section>
       </main>
+      <ConfirmationCorrection
+        ouverte={confirmationOuverte}
+        nombre={reponsesInvalidees}
+        annuler={() => setConfirmationOuverte(false)}
+        confirmer={() => {
+          setConfirmationOuverte(false);
+          void entretien.soumettre();
+        }}
+      />
     </div>
   );
 }

@@ -41,6 +41,9 @@ const maintenant = () => new Date().toISOString();
 
 const empreinte = (entree: string) => createHash('sha256').update(entree).digest('hex').slice(0, 16);
 
+/** Invalide les anciennes questions quand leur règle de rédaction évolue. */
+const VERSION_PROMPT_QUESTIONS = 'questions-courtes-relances-detaillees-v2';
+
 interface LigneCadrage {
   id: string;
   client_nom: string;
@@ -225,7 +228,7 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
     // retrouver la même question en revenant sur le point. Le point de départ
     // entre dans la clé : il change la question, il doit la faire regénérer.
     empreinte(
-      `${ligne.client_metier}|${ligne.demande}|${ligne.maturite}|${decision?.besoin ?? ''}`,
+      `${VERSION_PROMPT_QUESTIONS}|${ligne.client_metier}|${ligne.demande}|${ligne.maturite}|${decision?.besoin ?? ''}`,
     ),
     async () => {
       const combien = point.props.length > 3 ? 4 : 3;
@@ -275,7 +278,11 @@ export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange
     index,
     `ouverture:${rang}`,
     // Sur l'empreinte du fil : réécrire une réponse regénère la suite.
-    empreinte(fil.map((e) => `${e.question}|${e.reponse}`).join('||')),
+    empreinte(
+      `${VERSION_PROMPT_QUESTIONS}|${fil
+        .map((e) => `${e.question}|${e.reponse}`)
+        .join('||')}`,
+    ),
     async () => {
       const { valeur } = await llm.generer<OuvertureBrute>(
         promptSuite(contexte, point, fil, rang, doitContinuer),
