@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS cadrage (
   mode          TEXT NOT NULL DEFAULT 'long',
   voie          TEXT NOT NULL DEFAULT 'entretien',
   step          INTEGER NOT NULL DEFAULT 0,
+  rang          INTEGER,
   draft         TEXT NOT NULL DEFAULT '',
   brief         TEXT NOT NULL DEFAULT '',
   lien1         TEXT NOT NULL DEFAULT '',
@@ -104,6 +105,8 @@ const AJOUTS: Array<{ table: string; colonne: string; definition: string }> = [
   { table: 'cadrage', colonne: 'maturite', definition: "TEXT NOT NULL DEFAULT ''" },
   // Un point dont le fil est terminé ne se rouvre pas au rechargement.
   { table: 'reponse', colonne: 'clos', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  // Position exacte dans le fil, utile quand le client corrige une ancienne réponse.
+  { table: 'cadrage', colonne: 'rang', definition: 'INTEGER' },
 ];
 
 function migrer(db: DatabaseSync): void {

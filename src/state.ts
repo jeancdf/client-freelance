@@ -1,5 +1,6 @@
 import {
   INDEX_HORS_PERIMETRE,
+  INDEX_PERIMETRE,
   POINTS,
   relanceDePrecision,
 } from '../shared/points';
@@ -46,6 +47,8 @@ export interface SessionMeta {
   token: string;
   client: Client;
   statut: Statut;
+  /** Position explicite restaurée par le serveur, absente sur une ancienne session. */
+  rang: number | null;
   /** Où le client a dit en être ; vide tant qu'il n'a pas répondu. */
   maturite: Maturite | '';
   creeLe: string;
@@ -75,6 +78,8 @@ export interface State {
   planOpen: boolean;
   /** Réponse en cours de saisie, avant validation du point. */
   draft: string;
+  /** Brouillons conservés pendant une navigation entre plusieurs questions. */
+  drafts: Record<string, string>;
   brief: string;
   lien1: string;
   lien2: string;
@@ -130,6 +135,7 @@ export const initialState: State = {
   dossierOpen: false,
   planOpen: false,
   draft: '',
+  drafts: {},
   brief:
     'Nous cherchons un prestataire pour développer un portail de commande à destination de nos 60 points de vente. Le contexte, les volumes et les contraintes techniques sont détaillés dans le document joint (v3, validé en comité le 4 mars).',
   lien1: 'https://camilledorval.fr',
@@ -174,6 +180,7 @@ export type Action =
   | { type: 'start'; mode: Mode }
   | { type: 'replay' }
   | { type: 'goStep'; step: number }
+  | { type: 'goQuestion'; point: number; rang: number }
   | { type: 'goAide' }
   | { type: 'goTension' }
   | { type: 'submit' }
@@ -201,6 +208,11 @@ export type Action =
 /** La clé d'une question dans `ouvertures` : un point, un rang. */
 export const cleOuverture = (point: number, rang: number) => `${point}:${rang}`;
 
+export interface PositionQuestion {
+  point: number;
+  rang: number;
+}
+
 /**
  * Ce qui s'affiche pour la question en cours. Tant que le serveur n'a rien
  * rendu, c'est la formulation de référence : l'entretien ne reste jamais muet
@@ -208,13 +220,36 @@ export const cleOuverture = (point: number, rang: number) => `${point}:${rang}`;
  */
 export function ouvertureOf(state: State, index: number, rang = state.rang): Ouverture {
   const point = POINTS[index];
+  const connue = state.ouvertures[cleOuverture(index, rang)];
+  const echange = state.echanges[index]?.[rang];
+  if (echange) {
+    return {
+      question: echange.question,
+      relance: connue?.relance ?? '',
+      propositions: connue?.propositions ?? [],
+      choix: connue?.choix ?? 'unique',
+    };
+  }
   return (
-    state.ouvertures[cleOuverture(index, rang)] ?? {
+    connue ?? {
       question: point.q,
       relance: point.hint,
       propositions: point.props,
       choix: point.selection ? ('multiple' as Choix) : ('unique' as Choix),
     }
+  );
+}
+
+/** L'échange affiché, s'il a déjà été enregistré dans le fil. */
+export function echangeCourant(state: State, index = currentIndex(state)): Echange | undefined {
+  return state.echanges[index]?.[state.rang];
+}
+
+/** Vrai quand la question affichée est déjà connue, même sans ses suggestions. */
+export function questionConnue(state: State, index = currentIndex(state)): boolean {
+  return Boolean(
+    state.ouvertures[cleOuverture(index, state.rang)] ??
+      state.echanges[index]?.[state.rang]?.question,
   );
 }
 
@@ -247,6 +282,44 @@ export function indicesPointsVisibles(state: State): number[] {
   );
 }
 
+function dernierRangRepondu(state: State, point: number): number | null {
+  const fil = state.echanges[point] ?? [];
+  for (let rang = fil.length - 1; rang >= 0; rang--) {
+    if (fil[rang].reponse.trim()) return rang;
+  }
+  return state.answers[point] !== undefined ? 0 : null;
+}
+
+/** La vraie question précédente, y compris dans le point visible précédent. */
+export function questionPrecedente(state: State): PositionQuestion | null {
+  const point = currentIndex(state);
+  if (state.rang > 0) {
+    const precedent = state.echanges[point]?.[state.rang - 1];
+    if (precedent?.reponse.trim()) return { point, rang: state.rang - 1 };
+  }
+
+  const visibles = indicesPointsVisibles(state);
+  const position = visibles.indexOf(point);
+  for (let k = position - 1; k >= 0; k--) {
+    const precedent = visibles[k];
+    const rang = dernierRangRepondu(state, precedent);
+    if (rang !== null) return { point: precedent, rang };
+  }
+  return null;
+}
+
+/** La question existante qui suit celle relue, dans le fil puis dans le dossier. */
+export function questionSuivante(state: State): PositionQuestion | null {
+  const point = currentIndex(state);
+  const fil = state.echanges[point] ?? [];
+  if (fil[state.rang + 1]) return { point, rang: state.rang + 1 };
+
+  const visibles = indicesPointsVisibles(state);
+  const position = visibles.indexOf(point);
+  const suivant = visibles[position + 1];
+  return suivant === undefined ? null : { point: suivant, rang: 0 };
+}
+
 /** Les points effectivement écrits, dans l'ordre. */
 export function pointsEcrits(state: State): number[] {
   return indicesPointsVisibles(state).filter((k) => state.answers[k] !== undefined);
@@ -258,6 +331,9 @@ export function pointsEcrits(state: State): number[] {
  * bouton doit y mener — d'où un seul calcul, partagé.
  */
 export function pointDeReprise(state: State): number {
+  if (state.session?.rang !== null && state.session?.rang !== undefined) {
+    return currentIndex(state);
+  }
   const visibles = indicesPointsVisibles(state);
   const ouvert = visibles.find(
     (k) => state.answers[k] !== undefined && !state.clos[k],
@@ -280,11 +356,17 @@ function rangEnCours(fil: Echange[], clos?: boolean, reponse?: string): number {
 
 /**
  * Où reprendre dans le fil d'un point. Un fil ouvert repart à sa question en
- * cours, brouillon vide ; un point clos qu'on rouvre pour le corriger repart de
- * sa première question, avec ce qui a été écrit.
+ * cours ; un point clos ouvert depuis le sommaire repart de sa première
+ * question. La navigation question par question choisit son rang explicitement.
  */
 export function rangDeReprise(state: State, step: number): number {
   return rangEnCours(state.echanges[step] ?? [], state.clos[step], state.answers[step]);
+}
+
+function reponseDeQuestion(state: State, point: number, rang: number): string {
+  const echange = state.echanges[point]?.[rang];
+  if (echange?.reponse.trim()) return echange.reponse;
+  return rang === 0 ? (state.answers[point] ?? '') : '';
 }
 
 /** Le serveur indexe par chaîne, à cause de JSON ; l'état indexe par nombre. */
@@ -292,6 +374,36 @@ function parIndex(source: Record<string, string>): Record<number, string> {
   const par: Record<number, string> = {};
   for (const [cle, valeur] of Object.entries(source)) par[Number(cle)] = valeur;
   return par;
+}
+
+function sansPoint<T>(source: Record<number, T>, point: number): Record<number, T> {
+  const copie = { ...source };
+  delete copie[point];
+  return copie;
+}
+
+function sansBrouillonsDepuis(
+  source: Record<string, string>,
+  point: number,
+  rang: number,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(source).filter(([cle]) => {
+      const [pointCle, rangCle] = cle.split(':').map(Number);
+      return pointCle !== point || rangCle < rang;
+    }),
+  );
+}
+
+function avecDraft(state: State, value: string): State {
+  return {
+    ...state,
+    draft: value,
+    drafts: {
+      ...state.drafts,
+      [cleOuverture(currentIndex(state), state.rang)]: value,
+    },
+  };
 }
 
 /**
@@ -309,30 +421,43 @@ function demoAnswers(upTo: number): Pick<State, 'answers' | 'confirmed'> {
   return { answers, confirmed };
 }
 
-function goStep(state: State, step: number, extra: Partial<State> = {}): State {
+function goQuestion(
+  state: State,
+  point: number,
+  rang: number,
+  extra: Partial<State> = {},
+): State {
   const visible = indicesPointsVisibles(state);
   const cible =
-    step === INDEX_HORS_PERIMETRE && !visible.includes(step)
-      ? (visible.find((index) => index > step) ?? visible[visible.length - 1] ?? LAST)
-      : step;
-  const rang = rangDeReprise(state, cible);
+    point === INDEX_HORS_PERIMETRE && !visible.includes(point)
+      ? (visible.find((index) => index > point) ?? visible[visible.length - 1] ?? LAST)
+      : point;
+  const rangCible = Math.max(0, rang);
+  const drafts = {
+    ...state.drafts,
+    [cleOuverture(currentIndex(state), state.rang)]: state.draft,
+  };
+  const cleCible = cleOuverture(cible, rangCible);
   return {
     ...state,
     screen: 'entretien',
     step: cible,
-    rang,
+    rang: rangCible,
     help: false,
     tension: false,
     tensionCourante: null,
     reformulation: null,
     occupe: false,
     dossierOpen: false,
-    // Un fil en cours attend une nouvelle réponse ; un point clos qu'on rouvre
-    // rend ses mots au client pour qu'il les corrige.
-    draft: rang > 0 ? '' : (state.answers[cible] ?? ''),
+    drafts,
+    draft: drafts[cleCible] ?? reponseDeQuestion(state, cible, rangCible),
     scrollTick: state.scrollTick + 1,
     ...extra,
   };
+}
+
+function goStep(state: State, step: number, extra: Partial<State> = {}): State {
+  return goQuestion(state, step, rangDeReprise(state, step), extra);
 }
 
 function advance(state: State, from: number): State {
@@ -418,6 +543,7 @@ export function reducer(state: State, action: Action): State {
           token: action.token,
           client: s.client,
           statut: s.statut,
+          rang: s.rang,
           maturite: s.maturite,
           creeLe: s.creeLe,
           majLe: s.majLe,
@@ -439,7 +565,16 @@ export function reducer(state: State, action: Action): State {
         clos,
         echanges,
         ouvertures,
-        rang: rangEnCours(echanges[s.step] ?? [], clos[s.step], answers[s.step]),
+        rang:
+          s.rang ??
+          rangEnCours(echanges[s.step] ?? [], clos[s.step], answers[s.step]),
+        drafts: {
+          [cleOuverture(
+            s.step,
+            s.rang ??
+              rangEnCours(echanges[s.step] ?? [], clos[s.step], answers[s.step]),
+          )]: s.draft,
+        },
         // Ce que le modèle a écrit lors des sessions précédentes : sans cela,
         // un client qui recharge verrait le récapitulatif retomber sur les
         // textes de la maquette.
@@ -479,6 +614,14 @@ export function reducer(state: State, action: Action): State {
      */
     case 'suite': {
       const point = action.point;
+      const texteChange = state.answers[point] !== action.texte;
+      const drafts = sansBrouillonsDepuis(state.drafts, point, state.rang);
+      const confirmed = texteChange
+        ? sansPoint(state.confirmed, point)
+        : state.confirmed;
+      const tensionResolved = texteChange
+        ? sansPoint(state.tensionResolved, point)
+        : state.tensionResolved;
 
       // Le fil continue : on reste sur le même point, une question plus loin.
       // Le brouillon repart à vide — c'est une nouvelle question, pas une
@@ -495,6 +638,21 @@ export function reducer(state: State, action: Action): State {
             ...state.ouvertures,
             [cleOuverture(point, action.rang)]: action.question,
           },
+          confirmed,
+          tensionResolved,
+          clos: sansPoint(state.clos, point),
+          deductions: texteChange
+            ? sansPoint(state.deductions, point)
+            : state.deductions,
+          reformulations: texteChange
+            ? sansPoint(state.reformulations, point)
+            : state.reformulations,
+          horsPerimetre:
+            point === INDEX_PERIMETRE ? null : state.horsPerimetre,
+          drafts: {
+            ...drafts,
+            [cleOuverture(point, action.rang)]: '',
+          },
           rang: action.rang,
           draft: '',
           occupe: false,
@@ -505,21 +663,29 @@ export function reducer(state: State, action: Action): State {
         ...state,
         answers: { ...state.answers, [point]: action.texte },
         echanges: { ...state.echanges, [point]: action.echanges },
+        confirmed,
+        tensionResolved,
         clos: { ...state.clos, [point]: true },
         deductions: action.deduction
           ? { ...state.deductions, [point]: action.deduction }
-          : state.deductions,
+          : texteChange
+            ? sansPoint(state.deductions, point)
+            : state.deductions,
         // Conservée dès qu'elle arrive, pas seulement à la validation : le
         // client peut rouvrir le récapitulatif sans être passé par l'écran de
         // reformulation, et le serveur l'a déjà en cache de toute façon.
         reformulations: action.reformulation
           ? { ...state.reformulations, [point]: action.reformulation }
-          : state.reformulations,
+          : texteChange
+            ? sansPoint(state.reformulations, point)
+            : state.reformulations,
         horsPerimetre: action.horsPerimetre ?? state.horsPerimetre,
+        drafts,
+        draft: '',
         occupe: false,
       };
 
-      if (action.tension && !state.tensionResolved[point]) {
+      if (action.tension && !tensionResolved[point]) {
         return {
           ...base,
           tension: true,
@@ -558,6 +724,7 @@ export function reducer(state: State, action: Action): State {
         step: 0,
         rang: 0,
         draft: '',
+        drafts: {},
         answers: {},
         confirmed: {},
         tensionResolved: {},
@@ -574,6 +741,7 @@ export function reducer(state: State, action: Action): State {
         step: 0,
         rang: 0,
         draft: '',
+        drafts: {},
         answers: {},
         confirmed: {},
         tensionResolved: {},
@@ -585,6 +753,9 @@ export function reducer(state: State, action: Action): State {
 
     case 'goStep':
       return goStep(state, action.step);
+
+    case 'goQuestion':
+      return goQuestion(state, action.point, action.rang);
 
     case 'goAide':
       return goStep(state, i, { help: true });
@@ -609,6 +780,12 @@ export function reducer(state: State, action: Action): State {
         ...state.answers,
         [i]: fil.map((echange) => echange.reponse).join('\n'),
       };
+      const texteChange = state.answers[i] !== answers[i];
+      const confirmed = texteChange ? sansPoint(state.confirmed, i) : state.confirmed;
+      const tensionResolved = texteChange
+        ? sansPoint(state.tensionResolved, i)
+        : state.tensionResolved;
+      const drafts = sansBrouillonsDepuis(state.drafts, i, state.rang);
 
       // La démonstration suit le même rythme qu'un dossier réel : au moins
       // deux questions, puis elle ferme faute de modèle pour décider d'une
@@ -630,6 +807,14 @@ export function reducer(state: State, action: Action): State {
             ...state.ouvertures,
             [cleOuverture(i, rang)]: suivante,
           },
+          confirmed,
+          tensionResolved,
+          clos: sansPoint(state.clos, i),
+          deductions: texteChange ? sansPoint(state.deductions, i) : state.deductions,
+          reformulations: texteChange
+            ? sansPoint(state.reformulations, i)
+            : state.reformulations,
+          drafts: { ...drafts, [cleOuverture(i, rang)]: '' },
           rang,
           draft: '',
         };
@@ -645,14 +830,18 @@ export function reducer(state: State, action: Action): State {
             .some((ligne) => ligne.trim() === point.props[point.tensionOn!]),
         ) &&
         !state.tension &&
-        !state.tensionResolved[i];
+        !tensionResolved[i];
 
       if (raisesTension) {
         return {
           ...state,
           answers,
           echanges: { ...state.echanges, [i]: fil },
+          confirmed,
+          tensionResolved,
           clos: { ...state.clos, [i]: true },
+          drafts,
+          draft: '',
           tension: true,
           scrollTick: state.scrollTick + 1,
         };
@@ -662,7 +851,15 @@ export function reducer(state: State, action: Action): State {
         ...state,
         answers,
         echanges: { ...state.echanges, [i]: fil },
+        confirmed,
+        tensionResolved,
         clos: { ...state.clos, [i]: true },
+        deductions: texteChange ? sansPoint(state.deductions, i) : state.deductions,
+        reformulations: texteChange
+          ? sansPoint(state.reformulations, i)
+          : state.reformulations,
+        drafts,
+        draft: '',
       };
       if (point.reform && state.mode === 'long') {
         return goScreen(answered, 'reform');
@@ -671,7 +868,7 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'setDraft':
-      return { ...state, draft: action.value };
+      return avecDraft(state, action.value);
 
     /**
      * En choix unique, la suggestion remplace la réponse. En choix multiple,
@@ -681,7 +878,7 @@ export function reducer(state: State, action: Action): State {
      */
     case 'pickProp': {
       if (ouvertureOf(state, i).choix === 'unique') {
-        return { ...state, draft: action.text };
+        return avecDraft(state, action.text);
       }
 
       const lignes = state.draft.split('\n').filter((l) => l.trim());
@@ -689,7 +886,7 @@ export function reducer(state: State, action: Action): State {
       const selection = state.rang === 0 ? POINTS[i].selection : undefined;
       if (deja === -1 && selection && lignes.length >= selection.max) return state;
       const suivantes = deja === -1 ? [...lignes, action.text] : lignes.filter((_, k) => k !== deja);
-      return { ...state, draft: suivantes.join('\n') };
+      return avecDraft(state, suivantes.join('\n'));
     }
 
     case 'openHelp':
@@ -701,16 +898,15 @@ export function reducer(state: State, action: Action): State {
     // Une piste d'aide s'ajoute comme une suggestion : même geste, même règle.
     case 'pickHelp': {
       if (ouvertureOf(state, i).choix === 'unique') {
-        return { ...state, help: false, draft: action.text };
+        return avecDraft({ ...state, help: false }, action.text);
       }
       const lignes = state.draft.split('\n').filter((l) => l.trim());
-      return {
-        ...state,
-        help: false,
-        draft: lignes.includes(action.text)
+      return avecDraft(
+        { ...state, help: false },
+        lignes.includes(action.text)
           ? lignes.filter((l) => l !== action.text).join('\n')
           : [...lignes, action.text].join('\n'),
-      };
+      );
     }
 
     // « La simplicité passe d'abord » : la réponse bascule sur l'autre priorité.
@@ -744,7 +940,7 @@ export function reducer(state: State, action: Action): State {
       return advance({ ...state, confirmed: { ...state.confirmed, [i]: true } }, i);
 
     case 'rejectReform':
-      return goStep(state, i);
+      return goQuestion(state, i, dernierRangRepondu(state, i) ?? 0);
 
     case 'toggleDossier':
       return { ...state, dossierOpen: !state.dossierOpen };
@@ -774,7 +970,11 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'resumeAt3': {
-      if (state.session) return goStep(state, pointDeReprise(state));
+      if (state.session) {
+        return state.session.rang === null
+          ? goStep(state, pointDeReprise(state))
+          : goQuestion(state, currentIndex(state), state.rang);
+      }
       const demo = demoAnswers(2);
       return goScreen(state, 'entretien', {
         step: 2,

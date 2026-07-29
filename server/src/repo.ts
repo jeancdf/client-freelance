@@ -33,6 +33,7 @@ interface LigneBase {
   mode: string;
   voie: string;
   step: number;
+  rang: number | null;
   draft: string;
   brief: string;
   lien1: string;
@@ -200,6 +201,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     mode: ligne.mode as Mode,
     voie: ligne.voie as Voie,
     step: ligne.step,
+    rang: ligne.rang,
     draft: ligne.draft,
     brief: ligne.brief,
     lien1: ligne.lien1,
@@ -276,6 +278,7 @@ const CHAMPS_PATCH = {
   maturite: 'maturite',
   voie: 'voie',
   step: 'step',
+  rang: 'rang',
   draft: 'draft',
   brief: 'brief',
   lien1: 'lien1',
@@ -294,6 +297,9 @@ function valider(patch: PatchSession): void {
   }
   if (patch.step !== undefined && (!Number.isInteger(patch.step) || patch.step < 0 || patch.step >= POINTS.length)) {
     throw new ErreurRequete(400, `step doit être un entier entre 0 et ${POINTS.length - 1}`);
+  }
+  if (patch.rang !== undefined && (!Number.isSafeInteger(patch.rang) || patch.rang < 0)) {
+    throw new ErreurRequete(400, 'rang doit être un entier positif');
   }
 }
 
@@ -333,10 +339,14 @@ export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree:
     throw new ErreurRequete(400, 'La réponse ne peut pas être vide.');
   }
 
+  const precedente = db
+    .prepare('SELECT texte FROM reponse WHERE cadrage_id = ? AND point = ?')
+    .get(ligne.id, point) as { texte: string } | undefined;
+  const texteChange = precedente !== undefined && precedente.texte !== entree.texte;
   const now = maintenant();
-  // Le drapeau `confirme` ne retombe jamais tout seul : une reformulation
-  // acceptée le reste tant que le client ne réécrit pas le point. `clos` suit
-  // la même règle — un point refermé le reste jusqu'à ce qu'on le rouvre.
+  // Une reformulation et un arbitrage ne restent acquis que si le texte est
+  // identique. `clos` reflète toujours l'écriture courante : réécrire une
+  // ancienne réponse sans `clore` rouvre le point.
   db.prepare(
     `INSERT INTO reponse (cadrage_id, point, texte, confirme, arbitre, clos, maj_le)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -345,8 +355,10 @@ export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree:
        confirme = CASE WHEN reponse.texte = excluded.texte
                        THEN MAX(reponse.confirme, excluded.confirme)
                        ELSE excluded.confirme END,
-       arbitre  = MAX(reponse.arbitre, excluded.arbitre),
-       clos     = MAX(reponse.clos, excluded.clos),
+       arbitre  = CASE WHEN reponse.texte = excluded.texte
+                       THEN MAX(reponse.arbitre, excluded.arbitre)
+                       ELSE excluded.arbitre END,
+       clos     = excluded.clos,
        maj_le   = excluded.maj_le`,
   ).run(
     ligne.id,
@@ -357,6 +369,22 @@ export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree:
     entree.clore ? 1 : 0,
     now,
   );
+
+  // Tant que la nouvelle version du fil n'est pas refermée et réanalysée, les
+  // contenus calculés sur l'ancienne réponse ne doivent plus ressortir après
+  // un rechargement.
+  if (texteChange) {
+    db.prepare(
+      `DELETE FROM generation
+       WHERE cadrage_id = ? AND point = ? AND genre IN ('reformulation', 'deduction')`,
+    ).run(ligne.id, point);
+    if (point === INDEX_PERIMETRE) {
+      db.prepare(
+        `DELETE FROM generation
+         WHERE cadrage_id = ? AND point = ? AND genre = 'hors-perimetre'`,
+      ).run(ligne.id, INDEX_HORS_PERIMETRE);
+    }
+  }
 
   db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, ligne.id);
 

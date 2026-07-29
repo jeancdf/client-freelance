@@ -138,6 +138,7 @@ describe('migration du schéma', () => {
     try {
       // Le cadrage d'avant survit, et la nouvelle écriture passe.
       assert.equal(parToken(migree, 'jeton-ancien')?.client_nom, 'Client d’avant');
+      assert.equal(parToken(migree, 'jeton-ancien')?.rang, null);
       const neuf = creer(migree, { nom: 'Après' }, { courriel: 'a@b.fr', ipEmpreinte: 'x' });
       assert.equal(
         (

@@ -11,8 +11,12 @@ import {
 import {
   answerOf,
   currentIndex,
+  echangeCourant,
   indicesPointsVisibles,
   ouvertureOf,
+  questionConnue,
+  questionPrecedente,
+  questionSuivante,
 } from '../state';
 
 const LAST = POINTS.length - 1;
@@ -35,6 +39,7 @@ function ConfigurateurContraintes({
   occupe,
   sessionReelle,
   modeLong,
+  libelleSoumission,
   changer,
   soumettre,
   passerEnCourt,
@@ -44,6 +49,7 @@ function ConfigurateurContraintes({
   occupe: boolean;
   sessionReelle: boolean;
   modeLong: boolean;
+  libelleSoumission: string;
   changer: (champ: keyof ConfigurationContraintes, valeur: string) => void;
   soumettre: () => void;
   passerEnCourt: () => void;
@@ -123,7 +129,7 @@ function ConfigurateurContraintes({
             onClick={soumettre}
             disabled={occupe || invalide}
           >
-            {occupe ? 'J’analyse vos contraintes…' : 'Continuer avec l’IA'}
+            {occupe ? 'J’analyse vos contraintes…' : libelleSoumission}
           </button>
         </div>
       </div>
@@ -150,6 +156,24 @@ export function Entretien() {
   const index = currentIndex(state);
   const point = POINTS[index];
   const pointsVisibles = indicesPointsVisibles(state);
+  const precedente = questionPrecedente(state);
+  const suivante = questionSuivante(state);
+  const echange = echangeCourant(state, index);
+  const historique = Boolean(echange?.reponse.trim());
+  const reponseOriginale = echange?.reponse.trim() ?? '';
+  const reponseModifiee = historique && state.draft.trim() !== reponseOriginale;
+  const reponsesInvalidees = historique
+    ? (state.echanges[index] ?? [])
+        .slice(state.rang + 1)
+        .filter((item) => item.reponse.trim()).length
+    : 0;
+  const libelleCorrection = !reponseModifiee
+    ? suivante
+      ? 'Revenir à la question suivante'
+      : 'Réponse inchangée'
+    : reponsesInvalidees > 0
+      ? 'Enregistrer et adapter la suite'
+      : 'Enregistrer la correction';
 
   // Une relance remplace la question au même endroit. On l'accompagne d'un
   // défilement doux vers ce bloc, plutôt que de renvoyer brutalement en haut.
@@ -187,7 +211,7 @@ export function Entretien() {
   const enAttente =
     Boolean(state.session) &&
     !configurateurContraintes &&
-    !state.ouvertures[`${index}:${state.rang}`];
+    !questionConnue(state, index);
   const propositions = ouverture.propositions;
   const selection = state.rang === 0 ? point.selection : undefined;
   const selectionInvalide = Boolean(
@@ -206,6 +230,33 @@ export function Entretien() {
       type: 'setDraft',
       value: serialiserContraintes({ ...contraintes, [champ]: valeur }),
     });
+  };
+
+  const soumettre = () => {
+    if (historique && !reponseModifiee) {
+      if (suivante) {
+        dispatch({
+          type: 'goQuestion',
+          point: suivante.point,
+          rang: suivante.rang,
+        });
+      }
+      return;
+    }
+
+    if (
+      reponseModifiee &&
+      reponsesInvalidees > 0 &&
+      !window.confirm(
+        `Cette correction supprimera ${reponsesInvalidees} ${
+          reponsesInvalidees > 1 ? 'réponses suivantes' : 'réponse suivante'
+        } de ce point. L’IA adaptera ensuite ses questions à votre nouvelle réponse. Continuer ?`,
+      )
+    ) {
+      return;
+    }
+
+    void entretien.soumettre();
   };
 
   // Même règle pour l'aide : sur un dossier réel, on n'affiche pas les pistes
@@ -344,10 +395,30 @@ export function Entretien() {
             ref={questionRef}
             className="question-turn"
           >
+            {precedente && (
+              <div className="question-nav" aria-label="Navigation entre les questions">
+                <button
+                  type="button"
+                  className="question-nav__previous"
+                  onClick={() =>
+                    dispatch({
+                      type: 'goQuestion',
+                      point: precedente.point,
+                      rang: precedente.rang,
+                    })
+                  }
+                  disabled={state.occupe}
+                >
+                  <span aria-hidden="true">←</span> Question précédente
+                </button>
+              </div>
+            )}
             <div className="question" aria-live="polite">
               <p className="lbl question__header">
                 {configurateurContraintes
                   ? 'Configuration initiale · trois champs'
+                  : historique
+                    ? `Question ${state.rang + 1} · réponse enregistrée`
                   : `Question ${state.rang + 1}${
                       state.rang === 0
                         ? ' · deux minimum sur ce point'
@@ -382,12 +453,14 @@ export function Entretien() {
                   occupe={state.occupe}
                   sessionReelle={Boolean(state.session)}
                   modeLong={state.mode === 'long'}
+                  libelleSoumission={historique ? libelleCorrection : 'Continuer avec l’IA'}
                   changer={changerContrainte}
-                  soumettre={() => void entretien.soumettre()}
+                  soumettre={soumettre}
                   passerEnCourt={() => dispatch({ type: 'switchCourt' })}
                 />
               ) : (
               <>
+              {propositions.length > 0 && (
               <div className="props">
                 <p className="lbl props__label">
                   {selection
@@ -421,6 +494,7 @@ export function Entretien() {
                   })}
                 </div>
               </div>
+              )}
 
               <div className="card">
                 <label htmlFor="rep" className="answer__label">
@@ -450,7 +524,7 @@ export function Entretien() {
                   </button>
                   {/* Dès la deuxième question d'un point, le client peut
                       décider lui-même que le point est assez précis. */}
-                  {state.rang > 0 && (
+                  {state.rang > 0 && !historique && (
                     <button
                       type="button"
                       className="btn btn--outline answer__clore"
@@ -465,13 +539,19 @@ export function Entretien() {
                   <button
                     type="button"
                     className="btn btn--primary answer__submit"
-                    onClick={() => void entretien.soumettre()}
-                    disabled={state.occupe || selectionInvalide}
+                    onClick={soumettre}
+                    disabled={
+                      state.occupe ||
+                      selectionInvalide ||
+                      (historique && !reponseModifiee && !suivante)
+                    }
                   >
                     {state.occupe
                       ? 'J’analyse votre réponse…'
                       : selectionInvalide
                         ? `${lignes.length}/${selection?.max ?? 3} éléments sélectionnés`
+                      : historique
+                        ? libelleCorrection
                       : state.rang === 0
                         ? 'Question suivante'
                         : 'Continuer'}

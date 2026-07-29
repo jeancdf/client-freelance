@@ -56,6 +56,12 @@ export function Landing() {
   const [valeurs, setValeurs] = useState(VIDE);
   const [etat, setEtat] = useState<'repos' | 'envoi'>('repos');
   const [erreur, setErreur] = useState<string | null>(null);
+  const [accesPrestataire, setAccesPrestataire] = useState(0);
+
+  function coulisserVersPrestataire(valeur: number): void {
+    setAccesPrestataire(valeur);
+    if (valeur >= 94) window.location.assign('/prestataire');
+  }
 
   /**
    * Ouvre le cadrage et entre dans la première question sans rien demander de
@@ -193,6 +199,28 @@ export function Landing() {
       <footer className="accueil__footer">
         <span>Nicolas Cazals — développement sur mesure</span>
         <span>nicolas@studiocazals.fr</span>
+        <div className="landing__prestataire">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={accesPrestataire}
+            className="landing__prestataire-slider"
+            aria-label="Faire glisser l’étoile pour ouvrir l’espace prestataire"
+            aria-valuetext={
+              accesPrestataire >= 94
+                ? 'Ouverture de l’espace prestataire'
+                : 'Faire glisser l’étoile vers la droite'
+            }
+            title="Faire glisser l’étoile"
+            onChange={(event) =>
+              coulisserVersPrestataire(Number(event.target.value))
+            }
+            onPointerUp={() => {
+              if (accesPrestataire < 94) setAccesPrestataire(0);
+            }}
+          />
+        </div>
       </footer>
     </main>
   );

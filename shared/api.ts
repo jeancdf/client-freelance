@@ -70,6 +70,11 @@ export interface Session {
   mode: Mode;
   voie: Voie;
   step: number;
+  /**
+   * Rang explicitement affiché dans le point, ou `null` pour une session qui
+   * reprend simplement à la question en attente déduite du fil.
+   */
+  rang: number | null;
   draft: string;
   brief: string;
   lien1: string;
@@ -110,6 +115,8 @@ export interface PatchSession {
   maturite?: Maturite;
   voie?: Voie;
   step?: number;
+  /** Rang de la question affichée dans le point courant. */
+  rang?: number;
   draft?: string;
   brief?: string;
   lien1?: string;

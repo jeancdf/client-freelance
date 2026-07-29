@@ -198,7 +198,18 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
 
       dispatch({ type: 'submit' });
       try {
-        await ecrire(texte, extra);
+        const fil = state.echanges[index] ?? [];
+        const historique = Boolean(fil[state.rang]?.reponse.trim());
+        const dernierRangRepondu = fil.reduce(
+          (dernier, echange, rang) => (echange.reponse.trim() ? rang : dernier),
+          -1,
+        );
+        // Modifier la dernière réponse d'un point terminé ne doit pas ajouter
+        // artificiellement une relance : on recalcule ses contenus dérivés en
+        // conservant sa clôture. Une réponse intermédiaire, elle, rouvre le fil.
+        const conserverCloture =
+          historique && state.clos[index] && state.rang === dernierRangRepondu;
+        await ecrire(texte, conserverCloture ? { ...extra, clore: true } : extra);
       } catch {
         // L'écriture a échoué : on rend la main plutôt que de laisser le bouton
         // tourner indéfiniment. `usePersistance` réessaiera en fond.

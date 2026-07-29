@@ -65,7 +65,7 @@
   :root {
     --pad: 52px;
     --rail: block;
-    --railcol: 216px minmax(0, 1fr);
+    --railcol: 196px minmax(0, 1fr);
     --mob: none;
     --qsize: 42px;
     --h1: 52px;
@@ -652,6 +652,94 @@ textarea.landing__input {
   text-align: center;
 }
 
+/* Accès prestataire volontairement discret : l'étoile doit parcourir toute la
+   piste, ce qui évite un clic accidentel depuis la page destinée aux clients. */
+.landing__prestataire {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  margin-left: auto;
+}
+
+.landing__prestataire-slider {
+  width: 88px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+.landing__prestataire-slider:hover,
+.landing__prestataire-slider:focus-visible {
+  opacity: 0.9;
+}
+
+.landing__prestataire-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--rule);
+}
+
+.landing__prestataire-slider::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -8px;
+  border: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--ink-45);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 94%,
+    50% 72%,
+    21% 94%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+}
+
+.landing__prestataire-slider::-moz-range-track {
+  height: 2px;
+  border: none;
+  border-radius: 999px;
+  background: var(--rule);
+}
+
+.landing__prestataire-slider::-moz-range-progress {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--ink-45);
+}
+
+.landing__prestataire-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 0;
+  background: var(--ink-45);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 94%,
+    50% 72%,
+    21% 94%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+}
+
 /* La marque d'une suggestion cumulable : + à prendre, × à retirer. */
 .prop__marque {
   font-family: 'IBM Plex Mono', monospace;
@@ -883,12 +971,12 @@ textarea.landing__input {
 /* ------------------------------------------------------------- entretien -- */
 
 .entretien__main {
-  max-width: 1120px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 0 var(--pad);
   display: grid;
   grid-template-columns: var(--railcol);
-  gap: 0 56px;
+  gap: 0 44px;
   align-items: start;
 }
 
@@ -958,7 +1046,8 @@ textarea.landing__input {
 
 .entretien__col {
   padding: 26px 0 0;
-  max-width: 680px;
+  width: 100%;
+  max-width: 900px;
 }
 
 /* Repère d'avancement mobile, en remplacement du sommaire. */
@@ -1070,6 +1159,34 @@ textarea.landing__input {
   transform-origin: 50% 0;
 }
 
+.question-nav {
+  display: flex;
+  margin: 0 0 18px;
+}
+
+.question-nav__previous {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.question-nav__previous:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.question-nav__previous:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
 .question__header {
   font-size: 11px;
   letter-spacing: 0.18em;
@@ -1082,7 +1199,7 @@ textarea.landing__input {
   line-height: 1.16;
   letter-spacing: -0.012em;
   margin: 0 0 16px;
-  max-width: 26ch;
+  max-width: 34ch;
 }
 
 .question__hint {

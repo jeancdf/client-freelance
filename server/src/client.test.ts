@@ -80,6 +80,79 @@ describe('les questions successives d’un point', () => {
     assert.equal(apresDeuxieme.reponse.clos, true);
   });
 
+  it('régénère la suite après la correction d’une ancienne réponse', async () => {
+    const ligne = creer(db, {
+      nom: 'Camille correction',
+      metier: 'coach',
+      demande: 'Mieux suivre les programmes de mes clients',
+    });
+    const url = `/api/cadrage/${ligne.token}/reponse/0`;
+
+    const premiere = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { rang: 0, texte: 'Je prépare les programmes chaque dimanche.' },
+    });
+    assert.equal(premiere.statusCode, 200);
+
+    const deuxieme = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { rang: 1, texte: 'Cela me prend environ quatre heures.' },
+    });
+    assert.equal(deuxieme.statusCode, 200);
+    assert.equal(session(db, ligne).reponses['0'].clos, true);
+
+    const correction = await app.inject({
+      method: 'PUT',
+      url,
+      payload: { rang: 0, texte: 'Je prépare désormais les programmes chaque jour.' },
+    });
+    assert.equal(correction.statusCode, 200);
+    const apresCorrection = correction.json<SuiteReponse>();
+    assert.ok(apresCorrection.suite);
+    assert.equal(apresCorrection.rang, 1);
+
+    const relu = session(db, ligne);
+    assert.equal(relu.reponses['0'].clos, false);
+    assert.equal(relu.echanges['0'].length, 2);
+    assert.equal(relu.echanges['0'][0].reponse, 'Je prépare désormais les programmes chaque jour.');
+    assert.equal(relu.echanges['0'][1].reponse, '');
+  });
+
+  it('conserve la clôture quand seule la dernière réponse est corrigée', async () => {
+    const ligne = creer(db, {
+      nom: 'Camille dernière correction',
+      metier: 'coach',
+      demande: 'Mieux suivre les programmes de mes clients',
+    });
+    const url = `/api/cadrage/${ligne.token}/reponse/0`;
+
+    await app.inject({
+      method: 'PUT',
+      url,
+      payload: { rang: 0, texte: 'Je prépare les programmes chaque dimanche.' },
+    });
+    await app.inject({
+      method: 'PUT',
+      url,
+      payload: { rang: 1, texte: 'Cela me prend environ quatre heures.' },
+    });
+
+    const correction = await app.inject({
+      method: 'PUT',
+      url,
+      payload: {
+        rang: 1,
+        texte: 'Cela me prend maintenant environ trois heures.',
+        clore: true,
+      },
+    });
+    assert.equal(correction.statusCode, 200);
+    assert.equal(correction.json<SuiteReponse>().suite, null);
+    assert.equal(session(db, ligne).reponses['0'].clos, true);
+  });
+
   it('classe les trois éléments du périmètre sans rendre le troisième facultatif', () => {
     const point = POINTS[4];
     const elements = point.props.slice(0, 3);

@@ -56,12 +56,27 @@ describe('le fil d’un point', () => {
     const ligne = nouveau('Fil réécrit');
     ecrireEchange(db, ligne, 1, 0, 'Qui va s’en servir ?', { texte: 'Mes clients.' });
     ecrireEchange(db, ligne, 1, 1, 'Combien sont-ils ?', { texte: 'Une quarantaine.' });
+    ecrireReponse(db, ligne, 1, {
+      texte: 'Mes clients.\nUne quarantaine.',
+      confirme: true,
+      arbitre: true,
+      clore: true,
+    });
+    db.prepare(
+      `INSERT INTO generation (cadrage_id, point, genre, cle, contenu, cree_le)
+       VALUES (?, ?, 'reformulation', 'ancienne', ?, ?)`,
+    ).run(ligne.id, 1, JSON.stringify('Ancienne reformulation'), new Date().toISOString());
 
     // La première réponse change : la question suivante avait été écrite à
     // partir d'un texte qui n'existe plus.
     const r = ecrireEchange(db, ligne, 1, 0, 'Qui va s’en servir ?', { texte: 'Moi seul.' });
     assert.equal(r.texte, 'Moi seul.');
-    assert.equal(session(db, ligne).echanges['1'].length, 1);
+    const apres = session(db, ligne);
+    assert.equal(apres.echanges['1'].length, 1);
+    assert.equal(apres.reponses['1'].confirme, false);
+    assert.equal(apres.reponses['1'].arbitre, false);
+    assert.equal(apres.reponses['1'].clos, false);
+    assert.equal(apres.reformulations['1'], undefined);
   });
 
   it('redemande la validation quand le fil s’enrichit', () => {
@@ -173,11 +188,12 @@ describe('création', () => {
 describe('saisie en cours', () => {
   it('enregistre les champs et laisse les autres intacts', () => {
     const ligne = nouveau();
-    appliquerPatch(db, ligne, { draft: 'mes mots', step: 3 });
+    appliquerPatch(db, ligne, { draft: 'mes mots', step: 3, rang: 2 });
     const apres = parId(db, ligne.id)!;
 
     assert.equal(apres.draft, 'mes mots');
     assert.equal(apres.step, 3);
+    assert.equal(apres.rang, 2);
     assert.equal(apres.mode, 'long', 'le mode ne devait pas bouger');
   });
 
