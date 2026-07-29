@@ -301,6 +301,20 @@ input {
   letter-spacing: 0.01em;
 }
 
+.brand-link {
+  color: inherit;
+  border-bottom: 0;
+}
+
+.brand-link:hover {
+  color: var(--accent);
+}
+
+.brand-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
 /* En-tête des écrans « outil » (entretien, dépôt, récapitulatif). */
 .app-head {
   display: flex;

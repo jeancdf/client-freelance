@@ -13,7 +13,9 @@ export function ThemeButton({ className = 'btn-theme' }: { className?: string })
 export function SiteHeader() {
   return (
     <header className="site-head">
-      <span className="brand">Studio Cazals</span>
+      <a href="/" className="brand brand-link" aria-label="Revenir à l’accueil de Studio Cazals">
+        Studio Cazals
+      </a>
       <ThemeButton />
     </header>
   );
@@ -63,7 +65,13 @@ export function AppHeader({ mode, sticky, truncate, saved }: AppHeaderProps) {
   return (
     <header className={sticky ? 'app-head app-head--sticky' : 'app-head'}>
       <div className="app-head__left">
-        <span className="app-head__brand">Studio Cazals</span>
+        <a
+          href="/"
+          className="app-head__brand brand-link"
+          aria-label="Revenir à l’accueil de Studio Cazals"
+        >
+          Studio Cazals
+        </a>
         <span
           className={
             truncate
