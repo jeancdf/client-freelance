@@ -132,8 +132,9 @@ export function Deroule() {
         <p className="lbl deroule__kicker">Déroulé · sept points systématiques, un conditionnel</p>
         <h1 className="serif deroule__title">Ce que le client voit, et ce que la machine en fait.</h1>
         <p className="deroule__lead">
-          Chaque point utile pose au moins deux questions. Le hors-périmètre n'apparaît que si le
-          client a lui-même évoqué un besoin supplémentaire. Rien n'est ajouté pour remplir le plan.
+          Une question peut suffire quand la réponse tranche déjà le point. Le hors-périmètre
+          n'apparaît que si le client a lui-même évoqué un besoin supplémentaire. Rien n'est ajouté
+          pour remplir le plan.
         </p>
         <p className="note deroule__case">
           Cas suivi : coach sportif, quarante clients, demande initiale « une appli de fitness ».

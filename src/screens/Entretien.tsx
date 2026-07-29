@@ -5,6 +5,7 @@ import { Attente } from '../components/Attente';
 import {
   lireContraintes,
   POINTS,
+  questionsMinimales,
   serialiserContraintes,
   type ConfigurationContraintes,
 } from '../../shared/points';
@@ -442,13 +443,13 @@ export function Entretien() {
                   ? 'Configuration initiale · trois champs'
                   : historique
                     ? `Question ${state.rang + 1} · réponse enregistrée`
-                  : `Question ${state.rang + 1}${
-                      state.rang === 0
-                        ? ' · deux minimum sur ce point'
-                        : state.rang === 1
-                          ? ' · l’IA peut maintenant conclure'
-                          : ' · une précision reste utile'
-                    }`}
+                    : `Question ${state.rang + 1}${
+                        state.rang === 0 && questionsMinimales(point) > 1
+                          ? ` · ${questionsMinimales(point)} temps prévus`
+                          : state.rang > 0
+                            ? ' · précision ciblée'
+                            : ''
+                      }`}
               </p>
               {/* Rien ne s'affiche à la place de la question tant qu'elle n'est
                   pas écrite : lire une question, commencer à y penser, et la voir
@@ -575,8 +576,6 @@ export function Entretien() {
                         ? `${lignes.length}/${selection?.max ?? 3} éléments sélectionnés`
                       : historique
                         ? libelleCorrection
-                      : state.rang === 0
-                        ? 'Question suivante'
                         : 'Continuer'}
                   </button>
                 </div>

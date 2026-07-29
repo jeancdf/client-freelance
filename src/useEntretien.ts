@@ -35,12 +35,12 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
   // rien, et le client y retrouve la question qu'il avait lue.
   useEffect(() => {
     if (!token || state.screen !== 'entretien') return;
-    // Une question de suite arrive normalement avec la réponse précédente. On
-    // ne la redemande que si elle manque ou lui manque ses réponses probables :
-    // c'est le cas d'un client qui a rechargé en plein fil.
+    // Une question de suite arrive normalement avec la réponse précédente.
+    // Une liste de propositions vide est désormais un repli volontaire et
+    // neutre, pas un chargement incomplet.
     const rang = state.rang;
     const connue = state.ouvertures[`${index}:${rang}`];
-    if (connue && connue.propositions.length > 0) return;
+    if (connue) return;
 
     let annule = false;
 
@@ -80,8 +80,8 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
         ouverture: {
           question: point.q,
           relance: point.hint,
-          propositions: point.props,
-          choix: 'unique',
+          propositions: [],
+          choix: point.entretien.propositions.choix,
         },
       });
     })();
@@ -110,17 +110,31 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
         }
       }
 
-      // Sans ce repli, l'écran resterait sur son attente : depuis que les
-      // pistes de référence ne servent plus de patience, elles doivent servir
-      // de panne. Le client a besoin de trois pistes, même moins ajustées.
+      // Le contenu de référence appartient au coach de la démonstration. En
+      // cas de panne, ces pistes neutres n'inventent donc ni métier ni entourage.
       if (annule) return;
-      const point = POINTS[index];
       dispatch({
         type: 'aide',
         point: index,
         aide: {
-          titre: point.help.title,
-          pistes: point.help.items.map((piste) => ({ texte: piste.text, effet: piste.effect })),
+          titre: 'Partez de ce que vous savez déjà, sans chercher la réponse parfaite.',
+          pistes: [
+            {
+              texte: 'Je peux raconter un exemple récent avec mes propres mots.',
+              effet:
+                'Conséquence : un cas réel distingue ce qui doit être prévu de ce qui reste exceptionnel.',
+            },
+            {
+              texte: 'Je peux décrire ce qui arrive le plus souvent.',
+              effet:
+                'Conséquence : le projet se concentre d’abord sur la situation habituelle.',
+            },
+            {
+              texte: 'Je préfère indiquer ce qui reste encore à définir.',
+              effet:
+                'Conséquence : cette incertitude restera visible et devra être levée avant le devis final.',
+            },
+          ],
         },
       });
     })();

@@ -42,7 +42,7 @@ after(async () => {
 });
 
 describe('les questions successives d’un point', () => {
-  it('pose toujours une deuxième question avant de pouvoir clore automatiquement', async () => {
+  it('clôt un point après une seule réponse précise quand aucun second tour n’est requis', async () => {
     const ligne = creer(db, {
       nom: 'Camille',
       metier: 'coach',
@@ -60,24 +60,10 @@ describe('les questions successives d’un point', () => {
 
     assert.equal(premiere.statusCode, 200);
     const apresPremiere = premiere.json<SuiteReponse>();
-    assert.ok(apresPremiere.suite, 'une deuxième question doit être renvoyée');
-    assert.equal(apresPremiere.rang, 1);
-    assert.equal(session(db, ligne).echanges['0'].length, 2);
-
-    const deuxieme = await app.inject({
-      method: 'PUT',
-      url: `/api/cadrage/${ligne.token}/reponse/0`,
-      payload: {
-        rang: 1,
-        texte: 'Cela concerne une douzaine de programmes chaque semaine.',
-      },
-    });
-
-    assert.equal(deuxieme.statusCode, 200);
-    const apresDeuxieme = deuxieme.json<SuiteReponse>();
-    assert.equal(apresDeuxieme.suite, null);
-    assert.equal(apresDeuxieme.rang, -1);
-    assert.equal(apresDeuxieme.reponse.clos, true);
+    assert.equal(apresPremiere.suite, null);
+    assert.equal(apresPremiere.rang, -1);
+    assert.equal(apresPremiere.reponse.clos, true);
+    assert.equal(session(db, ligne).echanges['0'].length, 1);
   });
 
   it('régénère la suite après la correction d’une ancienne réponse', async () => {
@@ -86,27 +72,39 @@ describe('les questions successives d’un point', () => {
       metier: 'coach',
       demande: 'Mieux suivre les programmes de mes clients',
     });
-    const url = `/api/cadrage/${ligne.token}/reponse/0`;
+    const url = `/api/cadrage/${ligne.token}/reponse/${INDEX_CONTRAINTES}`;
+    const configuration = {
+      delai: 'Avant septembre',
+      budget: 'Entre 8 000 et 12 000 €',
+      technologies: 'Aucune technologie imposée',
+    };
 
     const premiere = await app.inject({
       method: 'PUT',
       url,
-      payload: { rang: 0, texte: 'Je prépare les programmes chaque dimanche.' },
+      payload: { rang: 0, texte: serialiserContraintes(configuration) },
     });
     assert.equal(premiere.statusCode, 200);
+    assert.ok(premiere.json<SuiteReponse>().suite);
 
     const deuxieme = await app.inject({
       method: 'PUT',
       url,
-      payload: { rang: 1, texte: 'Cela me prend environ quatre heures.' },
+      payload: { rang: 1, texte: "Non, je ne vois pas d'autre contrainte." },
     });
     assert.equal(deuxieme.statusCode, 200);
-    assert.equal(session(db, ligne).reponses['0'].clos, true);
+    assert.equal(session(db, ligne).reponses[String(INDEX_CONTRAINTES)].clos, true);
 
     const correction = await app.inject({
       method: 'PUT',
       url,
-      payload: { rang: 0, texte: 'Je prépare désormais les programmes chaque jour.' },
+      payload: {
+        rang: 0,
+        texte: serialiserContraintes({
+          ...configuration,
+          delai: 'Avant octobre',
+        }),
+      },
     });
     assert.equal(correction.statusCode, 200);
     const apresCorrection = correction.json<SuiteReponse>();
@@ -114,10 +112,13 @@ describe('les questions successives d’un point', () => {
     assert.equal(apresCorrection.rang, 1);
 
     const relu = session(db, ligne);
-    assert.equal(relu.reponses['0'].clos, false);
-    assert.equal(relu.echanges['0'].length, 2);
-    assert.equal(relu.echanges['0'][0].reponse, 'Je prépare désormais les programmes chaque jour.');
-    assert.equal(relu.echanges['0'][1].reponse, '');
+    assert.equal(relu.reponses[String(INDEX_CONTRAINTES)].clos, false);
+    assert.equal(relu.echanges[String(INDEX_CONTRAINTES)].length, 2);
+    assert.match(
+      relu.echanges[String(INDEX_CONTRAINTES)][0].reponse,
+      /Avant octobre/,
+    );
+    assert.equal(relu.echanges[String(INDEX_CONTRAINTES)][1].reponse, '');
   });
 
   it('conserve la clôture quand seule la dernière réponse est corrigée', async () => {
@@ -128,22 +129,18 @@ describe('les questions successives d’un point', () => {
     });
     const url = `/api/cadrage/${ligne.token}/reponse/0`;
 
-    await app.inject({
+    const premiere = await app.inject({
       method: 'PUT',
       url,
       payload: { rang: 0, texte: 'Je prépare les programmes chaque dimanche.' },
     });
-    await app.inject({
-      method: 'PUT',
-      url,
-      payload: { rang: 1, texte: 'Cela me prend environ quatre heures.' },
-    });
+    assert.equal(premiere.json<SuiteReponse>().suite, null);
 
     const correction = await app.inject({
       method: 'PUT',
       url,
       payload: {
-        rang: 1,
+        rang: 0,
         texte: 'Cela me prend maintenant environ trois heures.',
         clore: true,
       },

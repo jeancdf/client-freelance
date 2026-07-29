@@ -5,9 +5,6 @@
 
 export type Mode = 'long' | 'court';
 
-/** Nombre de réponses exigées avant que l'IA puisse clore un point seule. */
-export const QUESTIONS_MIN_PAR_POINT = 2;
-
 /** Par où le client est passé : l'entretien complet, ou le dépôt de document. */
 export type Voie = 'entretien' | 'rapide';
 
@@ -22,9 +19,8 @@ export type Maturite = 'idee' | 'forme' | 'specs';
 export type Statut = 'en_cours' | 'valide';
 
 /**
- * Ce qu'une question attend. Le modèle le décide question par question : « qui
- * va s'en servir » appelle plusieurs réponses, « la seule chose sans laquelle
- * ça ne sert à rien » n'en appelle qu'une.
+ * Ce qu'une question attend. Le contrat de la section le fixe à l'ouverture ;
+ * une éventuelle précision suivante reste volontairement à choix unique.
  */
 export type Choix = 'unique' | 'multiple';
 

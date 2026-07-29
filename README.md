@@ -3,9 +3,10 @@
 Cadrage — l'entretien que remplit un client avant le premier rendez-vous, pour
 que le chiffrage parte d'un dossier écrit plutôt que d'un appel.
 
-Sept points systématiques et un point conditionnel, avec au moins deux questions
-sur chaque point affiché : chaque question suivante est écrite à partir de la
-réponse précédente, puis l'IA continue seulement si une précision utile manque.
+Sept points systématiques et un point conditionnel. Une réponse précise suffit
+sur la plupart des points ; le périmètre et les contraintes gardent un second
+tour parce qu'ils portent une décision distincte. Toute question suivante est
+écrite à partir de la réponse précédente et d'un seul axe encore manquant.
 La partie « Hors périmètre » n'existe que si le client a lui-même évoqué un
 besoin supplémentaire. Le client écrit avec ses mots ou clique parmi des
 réponses probables — une seule ou plusieurs, selon ce que la question appelle.
@@ -54,11 +55,11 @@ d'un client de démonstration en croyant que c'est le sien.
 ## Où se trouve quoi
 
 - `shared/points.ts` — les huit points possibles, dont un conditionnel et un
-  configurateur. Chacun porte une **intention** (ce que
-  le point doit établir, jamais réécrite) et une formulation de référence
-  (question, relance, réponses probables) qui sert de repli quand le modèle est
-  absent. C'est la structure du dossier : la retoucher change ce qui est
-  garanti couvert. Partagé avec le serveur.
+  configurateur. Chacun porte une **intention**, un contrat de génération et
+  une formulation de référence avec des réponses de démonstration. Sur un
+  dossier réel, les réponses d'un autre métier ne servent jamais de repli.
+  C'est la structure du dossier : la retoucher change ce qui est garanti
+  couvert. Partagé avec le serveur.
 - `shared/api.ts` — le contrat entre navigateur et serveur, défini une fois.
 - `src/state.ts` — la machine à états : navigation, brouillon, arbitrage,
   validation des reformulations.
@@ -145,8 +146,9 @@ attend la première au lieu de payer un second appel. Le récapitulatif lit ce c
 de l'onglet : le document livré cite la reformulation du client, y compris
 après un rechargement.
 
-**Sans clé, l'application marche.** Elle retombe sur les contenus écrits de la
-maquette — moins ajustés, jamais interrompus. Chaque repli est tracé dans le
+**Sans clé, l'application marche.** Elle conserve les questions neutres et les
+étapes déterministes, mais masque les réponses probables, reformulations et
+déductions écrites pour le cas de démonstration. Chaque repli est tracé dans le
 journal (`[generation] repli sur …`) : une dégradation silencieuse serait une
 panne invisible.
 
@@ -160,18 +162,23 @@ Réglages : `CADRAGE_OPENROUTER_KEY`, `CADRAGE_MODELE`, `CADRAGE_LLM_TIMEOUT`.
 
 ## Le fil d'un point
 
-Un point porte **au moins deux questions**, chacune écrite à partir de la
-réponse précédente. Ensuite, le modèle continue seulement si une précision
-change encore le périmètre ou le chiffrage :
+Chaque point possède son propre contrat : l'axe du premier tour, les axes
+complémentaires autorisés, la forme de ses réponses probables et son nombre
+minimal de réponses. Le modèle continue seulement si une précision change
+encore le périmètre ou le chiffrage :
 
-- **Deux réponses minimales sont garanties par le code.** Même sans clé LLM,
-  une relance de précision est posée avant de clore le point.
+- **Une réponse précise suffit généralement.** Le classement du périmètre et
+  la recherche des contraintes atypiques restent de vraies secondes étapes,
+  garanties même sans clé LLM.
 - **Il n'y a pas de plafond arbitraire.** Le modèle peut poser autant de
   questions utiles que nécessaire.
-- **Le client garde la main** dès la deuxième question avec « Passer à l'étape
+- **Le client garde la main** sur une question de suite avec « Passer à l'étape
   suivante ». Sa réponse en cours est enregistrée avant le passage.
 - **Le modèle ferme dès que le point est établi.** Il ne relance pas par
   curiosité, pour faire confirmer une réponse, ni pour anticiper un autre point.
+- **Les réponses probables sont contrôlées par le serveur.** Les cartes trop
+  longues, redondantes, fourre-tout ou contenant un proche ou collaborateur
+  inventé sont régénérées une fois, puis remplacées par un champ libre neutre.
 
 Le point VI suit une règle plus stricte : à la clôture du périmètre, une
 génération dédiée recherche un besoin supplémentaire explicitement formulé.
@@ -195,8 +202,8 @@ fil, une par ligne, et tout ce qui lit le dossier — récapitulatif, tableau de
 bord, analyse — continue de lire ce seul champ. Le fil lui-même vit dans la
 table `echange`, avec les questions telles qu'elles ont été posées.
 
-**Mode court** : exactement deux questions par point, sans relance
-supplémentaire. C'est la soupape.
+**Mode court** : chaque point s'arrête dès que son minimum propre est atteint,
+sans relance supplémentaire. C'est la soupape.
 
 ## L'attente
 
@@ -216,10 +223,10 @@ déposé une quinzaine. Une règle, tenue partout :
   réglée sur la durée observée. Elle s'arrête à 92 % : la fin appartient au
   modèle, pas à l'animation, et sous `prefers-reduced-motion` elle disparaît
   plutôt que de rester figée à zéro.
-- **Un repli va toujours avec un écran d'attente.** Depuis que les textes de
-  référence ne servent plus de patience, ils doivent servir de panne : deux
-  essais, puis le contenu de la maquette. Sans ça, une coupure réseau laisse le
-  client devant une attente sans fin.
+- **Un repli va toujours avec un écran d'attente.** Deux essais ont lieu, puis
+  la question neutre de référence s'affiche avec un champ libre, sans réponses
+  probables empruntées à la démonstration. Sans ça, une coupure réseau laisse
+  le client devant une attente sans fin.
 - **Le point suivant s'écrit pendant la reformulation.** Le serveur le lance dès
   qu'il a enregistré la réponse, sans attendre d'être interrogé ; le navigateur
   le redemande à la réception et tombe sur la génération déjà en cours. Le

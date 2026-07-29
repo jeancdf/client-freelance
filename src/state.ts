@@ -2,9 +2,9 @@ import {
   INDEX_HORS_PERIMETRE,
   INDEX_PERIMETRE,
   POINTS,
+  questionsMinimales,
   relanceDePrecision,
 } from '../shared/points';
-import { QUESTIONS_MIN_PAR_POINT } from '../shared/api';
 import type {
   Aide,
   Choix,
@@ -781,10 +781,9 @@ export function reducer(state: State, action: Action): State {
         : state.tensionResolved;
       const drafts = sansBrouillonsDepuis(state.drafts, i, state.rang);
 
-      // La démonstration suit le même rythme qu'un dossier réel : au moins
-      // deux questions, puis elle ferme faute de modèle pour décider d'une
-      // relance supplémentaire.
-      if (state.rang + 1 < QUESTIONS_MIN_PAR_POINT) {
+      // La démonstration suit le contrat du point. Seules les sections qui
+      // comportent une vraie seconde décision imposent une relance.
+      if (state.rang + 1 < questionsMinimales(point)) {
         const rang = state.rang + 1;
         const suivante = relanceDePrecision(
           point,

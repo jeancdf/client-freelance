@@ -10,6 +10,7 @@ import {
   INDEX_PERIMETRE,
   lireContraintes,
   POINTS,
+  questionsMinimales,
 } from '../../../shared/points.ts';
 import type {
   AideGeneree,
@@ -19,7 +20,6 @@ import type {
   PutReponse,
   SuiteReponse,
 } from '../../../shared/api.ts';
-import { QUESTIONS_MIN_PAR_POINT } from '../../../shared/api.ts';
 import * as generation from '../generation.ts';
 import { config, dossierFichiers } from '../config.ts';
 import type { Base } from '../db.ts';
@@ -135,10 +135,9 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       const apres = parToken(db, req.params.token)!;
       const fil = echangesDe(db, ligne.id)[String(point)] ?? [];
 
-      // Le client peut fermer le point lui-même. Sinon, l'IA pose au moins deux
-      // questions et continue autant que nécessaire. La version courte s'arrête
-      // dès que ces deux réponses minimales sont acquises.
-      const minimumAtteint = rang + 1 >= QUESTIONS_MIN_PAR_POINT;
+      // La plupart des sections peuvent être établies en une réponse précise.
+      // Le périmètre et les contraintes gardent leur véritable second tour.
+      const minimumAtteint = rang + 1 >= questionsMinimales(POINTS[point]);
       const finModeCourt = apres.mode === 'court' && minimumAtteint;
       const suite =
         req.body?.clore || finModeCourt

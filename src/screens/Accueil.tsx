@@ -50,8 +50,8 @@ export function Accueil() {
             <div className="accueil__path">
               <h2 className="serif accueil__path-title">Version courte — droit au but</h2>
               <p className="accueil__path-body">
-                Les mêmes points essentiels, avec deux questions chacun : des réponses déjà
-                rédigées à choisir ou à corriger, sans relance supplémentaire.
+                Les mêmes points essentiels, avec une question ciblée par décision et seulement
+                les secondes étapes indispensables.
               </p>
               <button
                 type="button"

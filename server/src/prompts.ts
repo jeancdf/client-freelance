@@ -30,6 +30,11 @@ Règles absolues :
 - Tu écris avec SES mots et SON métier, pas avec des formules génériques.
 - Tu vouvoies le client, toujours : "vous", jamais "tu".
 - Tu n'inventes jamais un fait que le client n'a pas donné.
+- Adapter une question au métier ne t'autorise pas à imaginer son organisation, ses logiciels, ses collègues, ses clients, ses chiffres ou ses habitudes. Quand le dossier ne donne pas le détail, utilise une catégorie neutre à confirmer.
+- Tu ne déduis jamais le genre, la situation familiale ou l'entourage professionnel d'une personne à partir de son prénom ou de son métier.
+- Tu n'inventes jamais une épouse, un mari, un proche, un associé, un salarié ou une autre personne qui travaillerait avec le client. Une personne n'apparaît que si le client l'a lui-même mentionnée.
+- Si le client a réellement mentionné une personne qui partage sa vie et que cette mention est utile ici, écris toujours « votre conjoint(e) ». N'écris jamais « votre femme », « votre mari », « votre épouse » ou « votre époux » dans un contenu généré.
+- Dans les réponses probables, ne fais participer aucun proche au travail du client si cette participation n'est pas déjà écrite dans le dossier.
 - Phrases courtes. Ton direct et concret, sans flatterie ni enthousiasme.
 - Jamais de tirets cadratins pour ponctuer une phrase.`;
 
@@ -40,22 +45,22 @@ Règles absolues :
  * le second s'agace si on lui réexplique son propre projet.
  */
 const OU_IL_EN_EST: Record<Maturite, string> = {
-  idee: `Il sait ce qui ne va pas dans son travail, pas comment y remédier. Pars de son quotidien et de ce que le problème lui coûte. Ne lui demande jamais de trancher une question de fabrication, et ne présuppose aucune forme (site, application, automatisation) qu'il n'a pas nommée lui-même.`,
-  forme: `Il a déjà une idée assez précise de ce à quoi ça doit ressembler. Tu peux l'interroger sur le parcours, les écrans, ce que voit chaque personne. Reste sans jargon, et fais-lui dire le POURQUOI de ce qu'il imagine : c'est là qu'est le cadrage.`,
-  specs: `Il arrive avec un document ou des exigences déjà écrites. Va droit au but, ne lui refais pas raconter ce qu'il a déjà formulé. Cherche ce que son document ne dit pas : les arbitrages, le hors-périmètre, les contraintes tues.`,
+  idee: `Le projet part d'un problème quotidien, sans réponse déjà choisie. Pars du quotidien et de ce que le problème coûte. Ne demande jamais de trancher une question de fabrication, et ne présuppose aucune forme (site, application, automatisation) qui n'a pas été nommée.`,
+  forme: `Une forme est déjà imaginée assez précisément. Tu peux interroger le parcours, les écrans et ce que voit chaque personne. Reste sans jargon, et fais préciser le POURQUOI de cette forme : c'est là qu'est le cadrage.`,
+  specs: `Un document ou des exigences existent déjà. Va droit au but et ne fais pas raconter de nouveau ce qui est formulé. Cherche ce que le document ne dit pas : les arbitrages, le hors-périmètre et les contraintes tues.`,
 };
 
 function portrait(c: Contexte): string {
   const lignes = [`Client : ${c.nom}${c.metier ? `, ${c.metier}` : ''}.`];
   if (c.demande) lignes.push(`Sa demande de départ : « ${c.demande} ».`);
-  if (c.maturite) lignes.push(`Où il en est : ${OU_IL_EN_EST[c.maturite]}`);
+  if (c.maturite) lignes.push(`Point de départ déclaré : ${OU_IL_EN_EST[c.maturite]}`);
 
   const ecrits = Object.entries(c.reponses)
     .map(([k, v]) => [Number(k), v] as const)
     .sort((a, b) => a[0] - b[0]);
 
   if (ecrits.length) {
-    lignes.push('', 'Ce qu\'il a déjà écrit, dans ses mots :');
+    lignes.push('', 'Ce que cette personne a déjà écrit, dans ses mots :');
     for (const [index, texte] of ecrits) {
       lignes.push(`- ${POINTS[index].num} — ${POINTS[index].label} : « ${texte} »`);
     }
@@ -78,7 +83,11 @@ function portrait(c: Contexte): string {
  * Le point garde son intention (les huit possibles structurent le dossier) ; c'est
  * sa formulation qui s'ajuste au métier du client.
  */
-export function promptOuverture(c: Contexte, point: Point, combien: number): Message[] {
+export function promptOuverture(c: Contexte, point: Point): Message[] {
+  const contrat = point.entretien;
+  const axesSuivants = contrat.axesSuivants
+    .map((axe) => `- ${axe}`)
+    .join('\n');
   return [
     { role: 'system', content: VOIX },
     {
@@ -86,25 +95,36 @@ export function promptOuverture(c: Contexte, point: Point, combien: number): Mes
       content: `${portrait(c)}
 
 Point ${point.num} — ${point.label}.
-Ce que ce point doit établir, sans exception : ${point.intention}
+Résultat attendu à la fin de toute la section : ${point.intention}
+
+Contrat de CE PREMIER TOUR uniquement : ${contrat.ouverture}.
+Axes réservés à une éventuelle question suivante :
+${axesSuivants || '- aucun'}
+
+Reste strictement sur le contrat du premier tour. Ne cherche pas à couvrir les axes suivants dans la question ou dans chaque réponse proposée.
 
 Formulation de référence, écrite pour un autre client : « ${point.q} »
 Relance de référence : « ${point.hint} »
 
 Écris pour CE client :
-1. La question, reformulée avec son vocabulaire et ses réalités de métier. Elle tient en une phrase directe de 16 mots maximum et cherche exactement la même chose que la référence, sans élargir ni rétrécir.
-2. La relance, sous la question, en deux phrases courtes et 25 à 45 mots au total. La première dit quoi raconter quand on ne sait pas par où commencer. La seconde explique concrètement pourquoi cette information compte pour le projet ou le devis.
-3. ${combien} réponses probables, à la première personne, telles que LUI les formulerait à l'oral.
-4. "choix" : "multiple" si plusieurs de ces réponses peuvent être vraies chez lui en même temps (des utilisateurs ou des contraintes cumulables), "unique" si la question demande de trancher une seule chose.
+1. Une question d'une phrase directe, 15 mots maximum, adaptée à son métier.
+2. Une relance de deux phrases courtes, 30 à 55 mots au total. La première aide à répondre concrètement. La seconde explique précisément ce que la réponse changera dans le périmètre, le parcours ou le devis.
+3. Entre ${contrat.propositions.min} et ${contrat.propositions.max} réponses probables. Forme obligatoire : ${contrat.propositions.forme}. Chaque réponse fait au maximum ${contrat.propositions.maxMots} mots.
+4. "choix" vaut exactement "${contrat.propositions.choix}".
 
 Réponds "termine": false : au premier tour, on pose toujours la question.
 
 Contraintes :
 - La question et la relance vouvoient le client. Elles portent sur du concret : pas de "votre besoin", pas de "votre problématique". La question se termine par un point d'interrogation.
 - La question ne contient ni préambule ni explication : toute précision utile va dans la relance.
-- Les réponses font une à deux phrases, nettement différentes les unes des autres : pas trois nuances de la même.
+- Chaque réponse répond directement à la question et se comprend seule.
+- ${contrat.propositions.atomiques ? "Chaque réponse contient une seule idée : aucune liste de plusieurs actions, rôles, indicateurs ou décisions dans la même carte." : "Chaque réponse décrit un seul scénario cohérent, sans lui ajouter un second scénario."}
+- Les réponses sont réellement différentes : pas de doublons, pas de reformulations d'une même idée et pas de carte « tout ce qui précède ».
+- Les réponses probables n'ajoutent aucune personne, aucun lien familial et aucune collaboration qui ne figurent pas déjà dans le dossier.
+- N'invente aucun nom de logiciel, chiffre, fréquence, cible, rôle ou comportement absent du dossier. Si une précision est inconnue, reste au niveau de la catégorie.
 - Aucune ne contredit ce qu'il a déjà écrit.
-- N'utilise pas le mot "solution" ni le mot "outil" en début de phrase.`,
+- N'utilise pas le mot "solution" ni le mot "outil" en début de phrase.
+- Ne transforme jamais une conséquence supposée en fait. Une proposition sert à se reconnaître, pas à compléter le dossier à la place du client.`,
     },
   ];
 }
@@ -112,9 +132,9 @@ Contraintes :
 /**
  * La question de suite, écrite à partir de ce que le client vient de répondre.
  *
- * Le modèle pose au moins deux questions, puis continue tant qu'une précision
- * utile au périmètre ou au chiffrage manque. Il n'a pas de plafond arbitraire :
- * le client garde toujours la possibilité de passer au point suivant.
+ * Le modèle ne prend qu'un axe manquant par tour. La plupart des points
+ * peuvent donc être clos après une réponse précise ; seuls les contrats qui
+ * comportent une vraie seconde décision imposent un deuxième tour.
  */
 export function promptSuite(
   c: Contexte,
@@ -126,6 +146,9 @@ export function promptSuite(
   const echanges = fil
     .map((e, i) => `Question ${i + 1} : « ${e.question} »\nSa réponse : « ${e.reponse} »`)
     .join('\n\n');
+  const axesSuivants = point.entretien.axesSuivants
+    .map((axe) => `- ${axe}`)
+    .join('\n');
   const consignePriorisation =
     point.priorisation && rang === 1
       ? `
@@ -144,7 +167,7 @@ Le premier échange est un configurateur qui a déjà demandé le délai, le bud
 
 Pour cette deuxième question :
 - demande uniquement s'il existe d'autres contraintes non classiques que ces trois catégories n'ont pas couvertes ;
-- donne comme pistes une validation interne, une règle métier ou légale, une dépendance extérieure, une exigence d'accessibilité ou une personne à convaincre ;
+- donne comme pistes un circuit de validation interne, une règle métier ou légale, une dépendance extérieure, une exigence d'accessibilité ou une autorisation à obtenir ;
 - ne redemande jamais le délai, le budget ou les technologies ;
 - "termine" doit valoir false.`
         : `
@@ -166,19 +189,22 @@ Ce qui s'est dit sur ce point :
 
 ${echanges}
 
-Ce point est-il établi ?
+Axes complémentaires autorisés, à traiter au maximum un par question :
+${axesSuivants || '- aucun'}
+
+Décide d'abord si le point est assez précis pour cadrer et chiffrer honnêtement. Une réponse courte peut suffire si elle tranche déjà l'essentiel.
 
 ${
   doitContinuer
-    ? `Il n'y a pas encore deux réponses sur ce point. Tu dois poser la question ${
+    ? `Le contrat de cette section impose encore une réponse. Tu dois poser la question ${
         rang + 1
-      } et répondre "termine": false, même si la première réponse était déjà précise. Cherche l'angle complémentaire le plus utile au chiffrage.`
-    : `Il y a déjà au moins deux réponses. Réponds "termine": true si tu as de quoi cadrer et chiffrer honnêtement ce point. Sinon, réponds "termine": false et pose la précision encore nécessaire. Il n'y a pas de nombre maximal de questions, mais chacune doit justifier le temps demandé au client.`
+      } et répondre "termine": false. Choisis un seul axe complémentaire autorisé qui n'a pas encore de réponse.`
+    : `Le minimum propre à cette section est atteint. Réponds "termine": true si l'information obtenue permet une décision de périmètre ou de devis. Sinon, réponds "termine": false et demande un seul détail encore nécessaire.`
 }
 ${consignePriorisation}
 ${consigneContraintes}
 
-Après les deux premières réponses, ne pose une question de suite QUE si l'un de ces cas est vrai :
+Quand le minimum est atteint, ne pose une question de suite QUE si l'un de ces cas est vrai :
 - il manque un fait, un chiffre ou un ordre de grandeur qui change le périmètre ou le chiffrage ;
 - sa réponse ouvre plusieurs directions réellement différentes et il faut savoir laquelle retenir ;
 - il a répondu à côté, par une généralité, ou d'une façon contradictoire avec le reste du dossier ;
@@ -188,14 +214,17 @@ N'en pose PAS pour :
 - approfondir par curiosité, ou par symétrie avec les autres points ;
 - lui faire confirmer ce qu'il vient de dire ;
 - demander quelque chose qu'un autre point demandera de toute façon.
+- compléter tous les axes de la section alors que ceux qui manquent ne changent aucune décision.
 
 Si tu poses la question ${rang + 1} :
-- elle part de SES mots, tient en une phrase directe de 16 mots maximum et se répond en une phrase ;
+- elle traite un seul axe manquant, part de SES mots, tient en une phrase directe de 15 mots maximum et se répond en une phrase ;
 - elle ne contient ni préambule ni explication ;
 - elle ne redemande rien de ce qui est écrit plus haut ;
-- "relance" contient deux phrases courtes et 25 à 45 mots au total : la première aide à savoir quoi raconter, la seconde dit concrètement pourquoi ça compte pour le projet ou le devis ;
-- deux à quatre réponses probables, à la première personne, tirées de ce qu'il vient de raconter ;
-- "choix" : "multiple" si plusieurs peuvent être vraies chez lui à la fois, "unique" sinon.`,
+- "relance" contient deux phrases courtes et 30 à 55 mots au total : la première aide à répondre, la seconde dit concrètement ce que cette précision changera ;
+- propose trois ou quatre réponses courtes, à la première personne, avec une seule idée par carte et 22 mots maximum ;
+- chaque proposition répond directement à cette nouvelle question ; aucune ne regroupe plusieurs actions, rôles, indicateurs ou décisions ;
+- les propositions utilisent uniquement des faits déjà écrits ou des catégories neutres : aucun proche, collaborateur, logiciel, chiffre, cible ou comportement inventé ;
+- "choix" vaut "unique", sauf instruction spéciale explicite ci-dessus.`,
     },
   ];
 }
@@ -252,7 +281,7 @@ Ce que le client vient d'écrire : « ${reponse} »
 Contraintes :
 - Commence par une minuscule (la phrase suit « Si je comprends bien : »).
 - Une seule phrase, deux au maximum.
-- Elle doit RESSERRER : nommer l'enjeu réel, rendre chiffré ce qui était vague, ou expliciter la conséquence pour le projet. Ne te contente pas de répéter.
+- Elle doit RESSERRER : nommer l'enjeu réel, faire ressortir un chiffre déjà donné, ou expliciter une conséquence directement contenue dans la réponse. Ne te contente pas de répéter.
 - Elle ne doit contenir aucun fait absent de ce qu'il a écrit. Si sa réponse est déjà précise et factuelle, resserre malgré tout sans rien ajouter.
 - Tu t'adresses à lui : "vous".`,
     },
@@ -310,13 +339,16 @@ export function promptAide(c: Contexte, point: Point): Message[] {
 Point ${point.num} — ${point.label}.
 Question posée : « ${point.q} »
 
-Le client a répondu « je ne sais pas ». Propose-lui trois pistes parmi lesquelles se reconnaître.
+La personne a répondu « je ne sais pas ». Propose trois pistes parmi lesquelles elle peut se reconnaître, sans compléter sa situation à sa place.
 
 Pour chaque piste :
-- "texte" : la piste écrite à la première personne, comme s'il la disait lui-même. Une phrase.
-- "effet" : la conséquence concrète sur le projet s'il retient cette piste. Commence par « Conséquence : ». Une phrase. Dis un vrai arbitrage (coût, délai, périmètre, ordre des travaux), pas une généralité.
+- "texte" : la piste écrite à la première personne, comme une réponse orale. Une phrase.
+- "effet" : la conséquence concrète sur le projet si cette piste est retenue. Commence par « Conséquence : ». Une phrase. Dis un vrai arbitrage (coût, délai, périmètre, ordre des travaux), pas une généralité.
+- une piste contient une seule idée et 22 mots maximum ;
+- n'invente aucun rôle, proche, logiciel, canal, chiffre, fréquence ou comportement absent du dossier ;
+- si les faits manquent, propose une catégorie neutre à confirmer, jamais un faux exemple précis.
 
-Écris aussi "titre" : une phrase d'introduction qui situe ces trois pistes dans son métier, sur le modèle de « Chez les notaires que j'accompagne, ça se joue presque toujours sur une de ces trois choses. »`,
+Écris aussi "titre" : une phrase courte qui explique ce que les trois pistes permettent de décider. Ne prétends jamais que Nicolas accompagne habituellement ce métier et n'utilise aucune statistique inventée.`,
     },
   ];
 }
@@ -335,9 +367,9 @@ export function promptDeduction(c: Contexte, point: Point, reponse: string): Mes
 Point ${point.num} — ${point.label}.
 Ce que le client vient d'écrire : « ${reponse} »
 
-Y a-t-il quelque chose d'important pour le chiffrage qui découle de sa réponse sans qu'il l'ait dit, et qu'on peut poser comme hypothèse plutôt que de lui poser une question de plus ?
+Y a-t-il quelque chose d'important pour le chiffrage qui découle directement de sa réponse et qu'on peut poser comme hypothèse explicite plutôt que de demander une confirmation de plus ?
 
-Ce doit être une hypothèse qu'il pourra contredire d'un coup d'œil, et qui change le devis. Exemple : « Le site vitrine reste en place et n'est pas touché. L'application vit à côté, sans lien avec la facturation au lancement. »
+Ce doit être une hypothèse que la personne pourra contredire d'un coup d'œil et qui change le devis. Exemple de forme : « Le système existant reste inchangé et la première version n'échange aucune donnée avec lui. » Cette forme n'est valable que si la réponse établit réellement ces deux faits.
 
 S'il n'y a rien de solide à déduire, réponds deduction = false. C'est fréquent.
 

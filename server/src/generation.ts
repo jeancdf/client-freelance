@@ -10,9 +10,10 @@ import { createHash } from 'node:crypto';
 import {
   INDEX_HORS_PERIMETRE,
   POINTS,
+  questionsMinimales,
   relanceDePrecision,
+  type Point,
 } from '../../shared/points.ts';
-import { QUESTIONS_MIN_PAR_POINT } from '../../shared/api.ts';
 import type {
   Aide,
   Analyse,
@@ -41,8 +42,8 @@ const maintenant = () => new Date().toISOString();
 
 const empreinte = (entree: string) => createHash('sha256').update(entree).digest('hex').slice(0, 16);
 
-/** Invalide les anciennes questions quand leur règle de rédaction évolue. */
-const VERSION_PROMPT_QUESTIONS = 'questions-courtes-relances-detaillees-v2';
+/** Invalide les anciens textes quand leur règle de rédaction évolue. */
+const VERSION_PROMPTS_NEUTRES = 'contrats-sections-atomiques-v4';
 
 interface LigneCadrage {
   id: string;
@@ -178,11 +179,239 @@ const SCHEMA_OUVERTURE = llm.objet({
   question: llm.texte,
   relance: llm.texte,
   choix: { type: 'string', enum: ['unique', 'multiple'] },
-  propositions: llm.liste(llm.texte, 2, 4),
+  propositions: llm.liste(llm.texte, 2, 8),
 });
 
-interface OuvertureBrute extends Ouverture {
+export interface OuvertureBrute extends Ouverture {
   termine: boolean;
+}
+
+const mots = (texte: string) =>
+  texte.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? [];
+
+const normaliser = (texte: string) =>
+  texte
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('fr')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+function tropProches(a: string, b: string): boolean {
+  const motsA = new Set(normaliser(a).split(' ').filter((mot) => mot.length > 2));
+  const motsB = new Set(normaliser(b).split(' ').filter((mot) => mot.length > 2));
+  if (!motsA.size || !motsB.size) return false;
+  let communs = 0;
+  for (const mot of motsA) if (motsB.has(mot)) communs++;
+  return communs / Math.min(motsA.size, motsB.size) >= 0.8;
+}
+
+function sourceDuContexte(contexte: Contexte, fil: Echange[] = []): string {
+  return [
+    contexte.nom,
+    contexte.metier,
+    contexte.demande,
+    contexte.brief ?? '',
+    ...Object.values(contexte.reponses),
+    ...fil.map((echange) => echange.reponse),
+  ].join(' ');
+}
+
+function contientPersonneInventee(propositions: string[], source: string): boolean {
+  const sortie = normaliser(propositions.join(' '));
+  const entree = normaliser(source);
+  const familles = [
+    /\b(femme|mari|epouse|epoux|conjoint|conjointe|compagne|compagnon|copine|copain|partenaire|proche|enfant|fille|fils|frere|soeur|mere|pere|parent)\b/,
+    /\b(associe|associee|salarie|salariee|assistant|assistante|secretaire|collaborateur|collaboratrice|collegue|equipe)\b/,
+  ];
+  return familles.some((famille) => famille.test(sortie) && !famille.test(entree));
+}
+
+function contientDesignationFamilialeGenree(sortieBrute: string): boolean {
+  return /\b(femme|mari|epouse|epoux|compagne|compagnon|copine|copain)\b/.test(
+    normaliser(sortieBrute),
+  );
+}
+
+function contientPrecisionInventee(sortieBrute: string, sourceBrute: string): boolean {
+  const sortie = normaliser(sortieBrute);
+  const source = normaliser(sourceBrute);
+  const nombresSortie = sortie.match(/\b\d+(?:[.,]\d+)?\b/g) ?? [];
+  const nombresSource = new Set(source.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []);
+  if (nombresSortie.some((nombre) => !nombresSource.has(nombre))) return true;
+
+  const marques =
+    /\b(whatsapp|excel|word|google|notion|trello|slack|teams|zoom|stripe|paypal|wordpress|shopify|youtube)\b/g;
+  const marquesSortie = sortie.match(marques) ?? [];
+  return marquesSortie.some((marque) => !source.includes(marque));
+}
+
+/**
+ * Le schéma JSON contrôle la forme technique ; ce contrôle porte sur la
+ * qualité éditoriale qui causait les cartes fourre-tout et les faits inventés.
+ */
+export function erreursOuverture(
+  point: Point,
+  valeur: OuvertureBrute,
+  contexte: Contexte,
+  phase: 'ouverture' | 'suite',
+  fil: Echange[] = [],
+): string[] {
+  const erreurs: string[] = [];
+  const question = valeur.question.trim();
+  const relance = valeur.relance.trim();
+  const propositions = valeur.propositions.map((proposition) => proposition.trim());
+  const priorisation = phase === 'suite' && point.priorisation && fil.length === 1;
+
+  if (!question.endsWith('?')) erreurs.push('la question doit se terminer par ?');
+  if (mots(question).length > 18) erreurs.push('la question dépasse 18 mots');
+  if (mots(relance).length < 25 || mots(relance).length > 65) {
+    erreurs.push('la relance doit contenir entre 25 et 65 mots');
+  }
+
+  if (phase === 'ouverture') {
+    const contrat = point.entretien.propositions;
+    if (propositions.length < contrat.min || propositions.length > contrat.max) {
+      erreurs.push(
+        `il faut entre ${contrat.min} et ${contrat.max} propositions`,
+      );
+    }
+    if (valeur.choix !== contrat.choix) {
+      erreurs.push(`choix doit valoir "${contrat.choix}"`);
+    }
+    for (const proposition of propositions) {
+      if (mots(proposition).length > contrat.maxMots) {
+        erreurs.push(`une proposition dépasse ${contrat.maxMots} mots`);
+      }
+      if (
+        contrat.atomiques &&
+        (proposition.includes('\n') ||
+          proposition.includes(';') ||
+          (proposition.match(/[.!?](?:\s|$)/g)?.length ?? 0) > 1)
+      ) {
+        erreurs.push('une proposition regroupe plusieurs idées');
+      }
+      if (
+        point.priorisation &&
+        (proposition.includes(',') || /\bet\b/i.test(proposition))
+      ) {
+        erreurs.push('une proposition de périmètre regroupe plusieurs actions');
+      }
+    }
+  } else if (priorisation) {
+    if (propositions.length !== 3) {
+      erreurs.push('la priorisation doit proposer trois classements complets');
+    }
+    for (const proposition of propositions) {
+      if (
+        !proposition.includes('Priorité 1 — à traiter en premier') ||
+        !proposition.includes('Priorité 2 — à traiter ensuite') ||
+        !proposition.includes('Priorité 3 — cruciale pour le projet')
+      ) {
+        erreurs.push('chaque classement doit contenir les trois labels imposés');
+      }
+    }
+    if (valeur.choix !== 'unique') {
+      erreurs.push('la priorisation doit être à choix unique');
+    }
+  } else {
+    if (propositions.length < 3 || propositions.length > 4) {
+      erreurs.push('une suite doit proposer trois ou quatre réponses');
+    }
+    if (valeur.choix !== 'unique') {
+      erreurs.push('une question de suite doit être à choix unique');
+    }
+    for (const proposition of propositions) {
+      if (mots(proposition).length > 22) {
+        erreurs.push('une proposition de suite dépasse 22 mots');
+      }
+      if (
+        proposition.includes('\n') ||
+        proposition.includes(';') ||
+        (proposition.match(/[.!?](?:\s|$)/g)?.length ?? 0) > 1
+      ) {
+        erreurs.push('une proposition de suite regroupe plusieurs idées');
+      }
+    }
+  }
+
+  for (let i = 0; i < propositions.length; i++) {
+    for (let j = i + 1; j < propositions.length; j++) {
+      if (tropProches(propositions[i], propositions[j])) {
+        erreurs.push('deux propositions sont presque identiques');
+      }
+    }
+  }
+  if (
+    contientPersonneInventee(
+      [question, relance, ...propositions],
+      sourceDuContexte(contexte, fil),
+    )
+  ) {
+    erreurs.push('la sortie invente un proche ou un collaborateur');
+  }
+  if (
+    contientDesignationFamilialeGenree(
+      [question, relance, ...propositions].join(' '),
+    )
+  ) {
+    erreurs.push('la sortie utilise une désignation familiale genrée');
+  }
+  if (
+    contientPrecisionInventee(
+      propositions.join(' '),
+      sourceDuContexte(contexte, fil),
+    )
+  ) {
+    erreurs.push('une proposition invente un chiffre ou un logiciel');
+  }
+
+  return [...new Set(erreurs)];
+}
+
+async function genererOuvertureValidee(
+  messages: llm.Message[],
+  point: Point,
+  contexte: Contexte,
+  phase: 'ouverture' | 'suite',
+  fil: Echange[] = [],
+  autoriserTermine = false,
+): Promise<OuvertureBrute> {
+  let corrections: string[] = [];
+
+  for (let essai = 0; essai < 2; essai++) {
+    const demande =
+      essai === 0
+        ? messages
+        : [
+            ...messages,
+            {
+              role: 'user' as const,
+              content: `La sortie précédente ne respecte pas le contrat : ${corrections.join(
+                ' ; ',
+              )}. Réécris entièrement le JSON, sans commenter les corrections.`,
+            },
+          ];
+    const { valeur } = await llm.generer<OuvertureBrute>(
+      demande,
+      phase,
+      SCHEMA_OUVERTURE,
+      { temperature: phase === 'ouverture' ? 0.5 : 0.3 },
+    );
+
+    if (phase === 'suite' && valeur.termine) {
+      if (autoriserTermine) return valeur;
+      corrections = ['"termine" doit valoir false pour ce tour obligatoire'];
+      continue;
+    }
+    corrections = erreursOuverture(point, valeur, contexte, phase, fil);
+    if (!corrections.length) return valeur;
+  }
+
+  throw new llm.ErreurLlm(
+    `Sortie invalide après correction : ${corrections.join(' ; ')}`,
+  );
 }
 
 /**
@@ -215,7 +444,7 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
       ? {
           ...pointReference,
           intention: `${pointReference.intention} Le besoin relevé est : « ${decision.besoin} ».`,
-          q: `Vous avez évoqué « ${decision.besoin} » en plus de vos trois priorités. Pour la première version, faut-il l'intégrer, le reporter ou l'écarter ?`,
+          q: `Que faut-il faire de « ${decision.besoin} » dans la première version ?`,
         }
       : pointReference;
 
@@ -228,34 +457,31 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
     // retrouver la même question en revenant sur le point. Le point de départ
     // entre dans la clé : il change la question, il doit la faire regénérer.
     empreinte(
-      `${VERSION_PROMPT_QUESTIONS}|${ligne.client_metier}|${ligne.demande}|${ligne.maturite}|${decision?.besoin ?? ''}`,
+      `${VERSION_PROMPTS_NEUTRES}|${ligne.client_metier}|${ligne.demande}|${ligne.maturite}|${decision?.besoin ?? ''}`,
     ),
     async () => {
-      const combien = point.props.length > 3 ? 4 : 3;
-      const { valeur } = await llm.generer<OuvertureBrute>(
-        promptOuverture(contexte, point, combien),
+      const valeur = await genererOuvertureValidee(
+        promptOuverture(contexte, point),
+        point,
+        contexte,
         'ouverture',
-        SCHEMA_OUVERTURE,
       );
       // Une question vide passerait le schéma : on préfère la référence.
       return {
         question: valeur.question.trim() || point.q,
         relance: valeur.relance.trim() || point.hint,
         propositions: valeur.propositions,
-        choix: point.selection
-          ? ('multiple' as Choix)
-          : point.conditionnel
-            ? ('unique' as Choix)
-            : valeur.choix === 'multiple'
-              ? ('multiple' as Choix)
-              : ('unique' as Choix),
+        choix: point.entretien.propositions.choix as Choix,
       };
     },
     () => ({
       question: point.q,
       relance: point.hint,
-      propositions: point.props,
-      choix: point.selection ? ('multiple' as Choix) : ('unique' as Choix),
+      // Les références sont écrites pour le coach de la démonstration. Les
+      // afficher à un plombier pendant une panne du modèle inventerait son
+      // métier à sa place : le champ libre reste disponible sans ces cartes.
+      propositions: [],
+      choix: point.entretien.propositions.choix as Choix,
     }),
   );
 }
@@ -263,14 +489,15 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
 /**
  * La question suivante sur un point, ou `null` quand il est établi.
  *
- * Même sans modèle, une relance de précision garantit les deux questions
- * minimales. Au-delà, le repli ferme le point plutôt que d'inventer.
+ * Même sans modèle, les sections qui portent une vraie seconde décision
+ * (classement du périmètre, contrainte atypique) gardent cette étape. Les
+ * autres se ferment après une réponse au lieu d'inventer une question.
  */
 export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange[], rang: number) {
   const point = POINTS[index];
   const contexte = contexteDe(db, ligne);
   const doitContinuer =
-    fil.filter((echange) => echange.reponse.trim()).length < QUESTIONS_MIN_PAR_POINT;
+    fil.filter((echange) => echange.reponse.trim()).length < questionsMinimales(point);
 
   return obtenir<Ouverture | null>(
     db,
@@ -279,16 +506,18 @@ export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange
     `ouverture:${rang}`,
     // Sur l'empreinte du fil : réécrire une réponse regénère la suite.
     empreinte(
-      `${VERSION_PROMPT_QUESTIONS}|${fil
+      `${VERSION_PROMPTS_NEUTRES}|${fil
         .map((e) => `${e.question}|${e.reponse}`)
         .join('||')}`,
     ),
     async () => {
-      const { valeur } = await llm.generer<OuvertureBrute>(
+      const valeur = await genererOuvertureValidee(
         promptSuite(contexte, point, fil, rang, doitContinuer),
+        point,
+        contexte,
         'suite',
-        SCHEMA_OUVERTURE,
-        { temperature: 0.3 },
+        fil,
+        !doitContinuer,
       );
 
       if (!valeur.question.trim()) {
@@ -298,10 +527,10 @@ export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange
       }
       if (valeur.termine && !doitContinuer) return null;
       return {
-        question: valeur.question,
-        relance: valeur.relance,
+        question: valeur.question.trim(),
+        relance: valeur.relance.trim(),
         propositions: valeur.propositions,
-        choix: valeur.choix === 'multiple' ? ('multiple' as Choix) : ('unique' as Choix),
+        choix: 'unique' as Choix,
       };
     },
     () =>
@@ -400,7 +629,9 @@ export function aide(db: Base, ligne: LigneCadrage, index: number) {
     ligne.id,
     index,
     'aide',
-    empreinte(`${ligne.client_metier}|${ligne.demande}|${ligne.maturite}`),
+    empreinte(
+      `${VERSION_PROMPTS_NEUTRES}|${ligne.client_metier}|${ligne.demande}|${ligne.maturite}`,
+    ),
     async () => {
       const { valeur } = await llm.generer<Aide>(
         promptAide(contexte, point),
@@ -410,8 +641,24 @@ export function aide(db: Base, ligne: LigneCadrage, index: number) {
       return valeur;
     },
     () => ({
-      titre: point.help.title,
-      pistes: point.help.items.map((i) => ({ texte: i.text, effet: i.effect })),
+      titre: 'Partez de ce que vous savez déjà, sans chercher la réponse parfaite.',
+      pistes: [
+        {
+          texte: 'Je peux raconter un exemple récent avec mes propres mots.',
+          effet:
+            'Conséquence : un cas réel permet de distinguer ce qui doit être prévu de ce qui reste exceptionnel.',
+        },
+        {
+          texte: 'Je peux décrire ce qui arrive le plus souvent.',
+          effet:
+            'Conséquence : le projet se concentre d’abord sur la situation habituelle.',
+        },
+        {
+          texte: 'Je préfère indiquer ce qui reste encore à définir.',
+          effet:
+            'Conséquence : cette incertitude sera visible dans le dossier et devra être levée avant le devis final.',
+        },
+      ],
     }),
   );
 }
@@ -439,7 +686,9 @@ export function reformulation(db: Base, ligne: LigneCadrage, index: number, repo
       );
       return valeur.reformulation.trim() || null;
     },
-    () => point.reform ?? null,
+    // Les reformulations de référence appartiennent au cas de démonstration.
+    // Sans modèle, mieux vaut ne rien soumettre que prêter ses faits au client.
+    () => null,
   );
 }
 
@@ -477,20 +726,9 @@ export function tension(db: Base, ligne: LigneCadrage, index: number, reponse: s
         optionB: valeur.optionB,
       };
     },
-    // Repli : la règle en dur de la maquette, recherchée dans chaque ligne du
-    // fil puisque certaines réponses, comme le périmètre, sont multiples.
-    () =>
-      point.tensionOn !== undefined &&
-      reponse
-        .split('\n')
-        .some((ligne) => ligne.trim() === point.props[point.tensionOn!])
-        ? {
-            explication:
-              "Vous m'avez dit que vos clients ne sont pas à l'aise avec les applications. Là, vous mettez au cœur du projet la saisie des charges à chaque série, par eux. Les deux peuvent tenir, mais il faut savoir ce qui compte le plus — ça change ce qu'on construit.",
-            optionA: "La simplicité passe d'abord",
-            optionB: "Le suivi des charges passe d'abord",
-          }
-        : null,
+    // Une contradiction dépend de tout le dossier. Le cas écrit pour la
+    // démonstration ne doit jamais être appliqué à un vrai client.
+    () => null,
   );
 }
 
@@ -517,7 +755,9 @@ export function deduction(db: Base, ligne: LigneCadrage, index: number, reponse:
       );
       return valeur.deduction && valeur.texte.trim() ? valeur.texte : null;
     },
-    () => point.deduit ?? null,
+    // Même principe que pour la reformulation : aucune hypothèse de la
+    // démonstration n'est réutilisée dans un dossier réel.
+    () => null,
   );
 }
 

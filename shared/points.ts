@@ -19,6 +19,33 @@ export interface Help {
   items: HelpItem[];
 }
 
+/**
+ * Contrat de génération propre à une section.
+ *
+ * L'intention décrit tout ce que le dossier devra finalement contenir. Ce
+ * contrat évite de demander au modèle de tout obtenir dès la première
+ * question, ce qui produisait des questions et des réponses fourre-tout.
+ */
+export interface ContratEntretien {
+  /** Un seul axe à traiter au premier tour. */
+  ouverture: string;
+  /** Axes complémentaires, à prendre un par un et seulement s'ils manquent. */
+  axesSuivants: string[];
+  /** Nombre minimal de réponses avant que le point puisse être clos. */
+  questionsMin: number;
+  propositions: {
+    /** Forme sémantique attendue pour chaque carte. */
+    forme: string;
+    choix: 'unique' | 'multiple';
+    min: number;
+    max: number;
+    /** Limite indicative, ensuite contrôlée côté serveur. */
+    maxMots: number;
+    /** Vrai si une carte doit porter une seule idée, sans liste interne. */
+    atomiques: boolean;
+  };
+}
+
 export interface Point {
   /** Numéro romain affiché (I…VIII). */
   num: string;
@@ -36,6 +63,8 @@ export interface Point {
   hint: string;
   /** Réponses probables proposées ; la première sert aussi de réponse par défaut. */
   props: string[];
+  /** Règles de génération propres à ce point et au premier tour. */
+  entretien: ContratEntretien;
   /** Force une sélection multiple bornée sur la première question du point. */
   selection?: { min: number; max: number };
   /** La première réponse doit être suivie d'un classement explicite. */
@@ -53,6 +82,10 @@ export interface Point {
   /** Index dans `props` de la réponse qui déclenche l'arbitrage. */
   tensionOn?: number;
   help: Help;
+}
+
+export function questionsMinimales(point: Point): number {
+  return Math.max(1, point.entretien.questionsMin);
 }
 
 export const INDEX_PERIMETRE = 4;
@@ -167,10 +200,10 @@ export function relanceDePrecision(point: Point, reponses: string[] = []) {
       question:
         "Existe-t-il d'autres contraintes non classiques que ce configurateur n'a pas couvertes ?",
       relance:
-        "Par exemple une validation interne, une règle métier ou légale, une dépendance extérieure, une exigence d'accessibilité ou une personne à convaincre.",
+        "Par exemple un circuit de validation interne, une règle métier ou légale, une dépendance extérieure, une exigence d'accessibilité ou une autorisation à obtenir.",
       propositions: [
         "Non, je ne vois pas d'autre contrainte à ajouter.",
-        'Une validation interne ou une personne précise peut bloquer la décision.',
+        'Un circuit de validation interne peut bloquer la décision.',
         'Une règle métier, légale ou de sécurité particulière doit être respectée.',
         "Le projet dépend d'un prestataire, d'une autorisation ou d'un calendrier extérieur.",
       ],
@@ -182,12 +215,8 @@ export function relanceDePrecision(point: Point, reponses: string[] = []) {
     question:
       "Qu'est-ce qui rend votre réponse concrète dans votre quotidien : un exemple, un nombre ou une contrainte ?",
     relance:
-      'Choisissez une piste pour commencer, puis remplacez les points de suspension par vos mots.',
-    propositions: [
-      'Je peux donner un exemple récent : …',
-      "L'ordre de grandeur à retenir est : …",
-      'La contrainte la plus importante est : …',
-    ],
+      'Ajoutez seulement le détail qui change réellement la compréhension du projet. Si votre réponse est déjà assez précise, vous pouvez passer à la section suivante.',
+    propositions: [],
     choix: 'unique' as const,
   };
 }
@@ -198,12 +227,30 @@ export const POINTS: Point[] = [
     intention:
       "le déclencheur précis de la démarche, et ce que le problème lui coûte aujourd'hui en temps, en argent ou en clients perdus.",
     q: "Qu'est-ce qui vous a fait vous dire, un jour précis, qu'il fallait faire quelque chose ?",
-    hint: "Racontez le dernier moment où ça vous a coûté cher — en temps, en client, en énervement.",
+    hint:
+      "Partez du dernier incident précis, même s'il paraît banal. Ce récit permet d'identifier le problème réel avant de parler de fonctionnalités ou de choisir trop vite une façon de le traiter.",
     props: [
       "Mes clients ne savent pas quoi faire quand je ne suis pas là. Je leur envoie des programmes en PDF sur WhatsApp, ils les perdent, et je passe mes dimanches à les refaire un par un.",
       "J'ai perdu deux clients ce trimestre : ils ne suivaient plus rien entre les séances et ont arrêté.",
       "Je n'arrive plus à prendre de nouveaux clients, la préparation me prend tout mon temps libre."
     ],
+    entretien: {
+      ouverture:
+        "faire raconter le déclic ou le dernier incident concret qui a déclenché la démarche, sans demander encore toutes ses conséquences",
+      axesSuivants: [
+        "le coût principal de ce problème aujourd'hui : temps, argent, occasions ou clients perdus",
+        "la fréquence ou l'ordre de grandeur, uniquement s'il change le chiffrage",
+      ],
+      questionsMin: 1,
+      propositions: {
+        forme: 'un seul déclic ou incident concret par carte',
+        choix: 'unique',
+        min: 3,
+        max: 4,
+        maxMots: 24,
+        atomiques: true,
+      },
+    },
     reform: "vous passez environ quatre heures chaque dimanche à réécrire des programmes qui se perdent dans WhatsApp, et c'est ça qui vous empêche de prendre plus de clients.",
     help: {
       title: "Chez les coachs que j'accompagne, le déclic vient presque toujours d'une de ces trois choses.",
@@ -219,13 +266,33 @@ export const POINTS: Point[] = [
     intention:
       "qui se servira de l'outil, à quel moment de sa journée, avec quelle aisance du numérique, et qui n'y touchera pas.",
     q: "Qui va se servir de cet outil, concrètement, et à quel moment de sa journée ?",
-    hint: "Vous, vos clients, quelqu'un d'autre ? Dites-moi aussi ceux qui ne s'en serviront pas.",
+    hint:
+      "Nommez séparément chaque personne ou groupe directement concerné par la première version. Cette distinction détermine les accès et les parcours à prévoir, sans attribuer un rôle à un proche ou à un collègue que vous n'avez pas cité.",
     props: [
       "Mes clients, une quarantaine, entre 30 et 55 ans. Ils ne sont pas très à l'aise avec les applications, il faut que ce soit évident.",
       "Moi seul pour préparer, et mes clients pour consulter leur séance du jour.",
       "Moi, mes clients, et à terme deux coachs qui travailleraient avec moi.",
       "Uniquement moi : mes clients continueraient à recevoir un document."
     ],
+    entretien: {
+      ouverture:
+        "identifier les personnes qui utiliseront directement la première version, avec un seul rôle ou groupe par carte",
+      axesSuivants: [
+        "le moment concret où chaque personne s'en sert",
+        "son aisance avec le numérique si elle change l'interface",
+        "les personnes explicitement exclues de la première version",
+      ],
+      questionsMin: 1,
+      propositions: {
+        forme:
+          "un seul rôle ou groupe d'utilisateurs par carte, sans lui attribuer d'action encore inconnue",
+        choix: 'multiple',
+        min: 3,
+        max: 5,
+        maxMots: 18,
+        atomiques: true,
+      },
+    },
     reform: "deux rôles seulement pour cette première version : vous qui préparez et suivez, vos clients qui consultent la séance du jour. Personne d'autre n'entre dans l'outil.",
     help: {
       title: "Trois façons de découper les utilisateurs, selon ce que vous visez.",
@@ -240,13 +307,32 @@ export const POINTS: Point[] = [
     num: 'III', label: 'Le fonctionnement actuel',
     intention:
       "le déroulé actuel, étape par étape, avec quels outils, et l'endroit exact où ça lui coûte du temps.",
-    q: "Racontez-moi comment ça se passe aujourd'hui, du moment où un client vous demande un programme jusqu'à ce qu'il l'ait entre les mains.",
-    hint: "Je cherche le détail concret : qui fait quoi, avec quels outils, et où ça vous coûte du temps.",
+    q: "Comment cette demande est-elle traitée aujourd'hui, du début à la fin ?",
+    hint:
+      "Suivez un cas habituel, étape après étape, sans chercher à le rendre parfait. Ce déroulé montre ce qui doit rester, disparaître ou être raccordé, et situe l'endroit où le projet peut réellement faire gagner du temps.",
     props: [
       "Je l'écris à la main dans Word, je l'exporte en PDF, et je l'envoie par WhatsApp. Je ne sais jamais si la séance a été faite : je l'apprends à la séance suivante.",
       "Je note sur papier pendant la séance, et je ressaisis tout le soir.",
       "Tout passe par WhatsApp, je n'ai pas de méthode fixe."
     ],
+    entretien: {
+      ouverture:
+        "faire choisir ou raconter un seul déroulé actuel cohérent, du déclencheur au résultat",
+      axesSuivants: [
+        "l'étape exacte où du temps se perd ou une information se perd",
+        "les outils réellement utilisés, seulement s'ils ne sont pas encore connus",
+      ],
+      questionsMin: 1,
+      propositions: {
+        forme:
+          "un scénario actuel cohérent par carte ; plusieurs étapes sont admises si elles décrivent le même déroulé",
+        choix: 'unique',
+        min: 3,
+        max: 4,
+        maxMots: 36,
+        atomiques: false,
+      },
+    },
     reform: "vous écrivez chaque programme à la main dans Word, vous l'envoyez en PDF par WhatsApp, et vous n'avez aucun moyen de savoir si la séance a été faite — vous le découvrez à la séance suivante.",
     help: {
       title: "Chez les coachs que j'accompagne, ça se passe presque toujours d'une de ces trois façons.",
@@ -262,12 +348,31 @@ export const POINTS: Point[] = [
     intention:
       "ce qui existe déjà autour de son activité et qui devra être gardé, raccordé, ou laissé strictement de côté.",
     q: "Qu'est-ce qui existe déjà autour de votre activité et qui devra rester, ou être repris ?",
-    hint: "Site, fichiers, logiciel de facturation, vidéos, tableur : même bricolé, ça compte.",
+    hint:
+      "Pensez aux fichiers, données, sites et logiciels déjà utilisés, même s'ils sont simples. Les connaître évite de reconstruire ce qui fonctionne et permet de chiffrer seulement les reprises ou les raccordements réellement nécessaires.",
     props: [
       "J'ai un site vitrine fait par un cousin, sous WordPress. Et je facture avec Abby.",
       "Rien, à part mes documents Word et mes vidéos sur YouTube.",
       "Un tableur Google où je note les mensurations et les charges de chacun."
     ],
+    entretien: {
+      ouverture:
+        "recenser ce qui existe déjà et pourrait être conservé, repris ou raccordé, avec une seule catégorie d'existant par carte",
+      axesSuivants: [
+        "ce qui doit être raccordé à la première version",
+        "ce qui doit rester strictement inchangé ou séparé",
+      ],
+      questionsMin: 1,
+      propositions: {
+        forme:
+          'une seule catégorie par carte : site, fichiers, données, logiciel ou aucun existant',
+        choix: 'multiple',
+        min: 3,
+        max: 5,
+        maxMots: 20,
+        atomiques: true,
+      },
+    },
     deduit: "Le site vitrine reste en place et n'est pas touché. L'application vit à côté, sans lien avec la facturation au lancement.",
     help: {
       title: "Ce qui compte comme « existant », même si ça n'en a pas l'air.",
@@ -284,13 +389,30 @@ export const POINTS: Point[] = [
       "les trois éléments principaux sans lesquels le projet ne remplit pas son rôle, puis leur ordre de priorité explicite sans rendre le troisième facultatif.",
     q: 'Quelles sont les trois choses principales que le projet doit absolument permettre ?',
     hint:
-      'Citez-en exactement trois, une par ligne. Vous les prioriserez juste après ; même la troisième restera cruciale pour le projet.',
+      "Une carte doit décrire une seule action du système, pas une liste de bénéfices. Choisissez-en exactement trois : elles formeront le cœur du premier devis et vous les classerez au tour suivant sans rendre la troisième facultative.",
     props: [
       "Créer des programmes réutilisables et les adapter par client sans tout réécrire.",
       "Que le client voie sa séance du jour sur son téléphone, sans compte à créer.",
       "Que je sache qui a fait sa séance et qui ne l'a pas faite.",
       "Que chacun saisisse ses charges à chaque série, pour suivre sa progression."
     ],
+    entretien: {
+      ouverture:
+        "faire sélectionner exactement trois actions fonctionnelles vitales, sans les classer à ce tour",
+      axesSuivants: [
+        "le classement explicite des trois actions, sans rendre la troisième facultative",
+      ],
+      questionsMin: 2,
+      propositions: {
+        forme:
+          "une seule action observable du système par carte, sans bénéfice, justification ni deuxième action",
+        choix: 'multiple',
+        min: 6,
+        max: 6,
+        maxMots: 18,
+        atomiques: true,
+      },
+    },
     selection: { min: 3, max: 3 },
     priorisation: true,
     tensionOn: 3,
@@ -310,14 +432,30 @@ export const POINTS: Point[] = [
     conditionnel: true,
     intention:
       "la décision à prendre sur un besoin supplémentaire que le client a explicitement évoqué en dehors de ses trois priorités : l'intégrer, le reporter ou l'écarter.",
-    q: "Vous avez évoqué un besoin en plus de vos trois priorités. Faut-il l'intégrer, le reporter ou l'écarter de la première version ?",
+    q: "Faut-il intégrer, reporter ou écarter ce besoin de la première version ?",
     hint:
-      "Parlez uniquement de ce besoin supplémentaire. S'il n'existe pas, cette partie ne doit pas être affichée.",
+      "Décidez uniquement du besoin supplémentaire déjà relevé, sans rouvrir vos trois priorités. Votre choix dira s'il modifie maintenant le périmètre et le budget, s'il doit seulement rester possible plus tard, ou s'il est complètement écarté.",
     props: [
       "Je le reporte à une version suivante, mais il faut préserver la possibilité de l'ajouter.",
       "Je l'écarte complètement : il ne fait pas partie du projet.",
       "Il doit finalement entrer dans la première version, même si cela change le budget."
     ],
+    entretien: {
+      ouverture:
+        "obtenir une seule décision sur le besoin supplémentaire déjà nommé : l'intégrer, le reporter ou l'écarter",
+      axesSuivants: [
+        "la conséquence de cette décision sur la première version, seulement si elle reste ambiguë",
+      ],
+      questionsMin: 1,
+      propositions: {
+        forme: 'une décision nette par carte : intégrer, reporter ou écarter',
+        choix: 'unique',
+        min: 3,
+        max: 3,
+        maxMots: 24,
+        atomiques: true,
+      },
+    },
     reform:
       "le besoin supplémentaire évoqué est explicitement reporté ou écarté de la première version ; il n'est pas devenu une priorité implicite.",
     help: {
@@ -335,7 +473,7 @@ export const POINTS: Point[] = [
       "le délai, le budget et les demandes technologiques imposées, puis toute autre contrainte non classique sur laquelle le prestataire n'a pas la main.",
     q: 'Quels délai, budget et demandes technologiques spécifiques encadrent le projet ?',
     hint:
-      "Renseignez chaque champ, même si la réponse est « à définir » ou « aucune ». L'IA cherchera ensuite ce que ces trois catégories ne couvrent pas.",
+      "Renseignez chaque champ, même avec « à définir » ou « aucune ». Ces trois réponses cadrent les limites connues ; une seconde question cherchera uniquement une contrainte atypique que le délai, le budget et la technologie ne peuvent pas couvrir.",
     props: [
       serialiserContraintes({
         delai: "Avant septembre, au moment où l'activité reprend",
@@ -343,11 +481,28 @@ export const POINTS: Point[] = [
         technologies: 'Compatible avec les téléphones anciens ; aucune technologie imposée',
       }),
     ],
+    entretien: {
+      ouverture:
+        'renseigner séparément le délai, le budget et les demandes technologiques dans le configurateur',
+      axesSuivants: [
+        "une éventuelle contrainte atypique non couverte par le configurateur",
+        "la conséquence concrète d'une contrainte atypique, uniquement si elle reste ambiguë",
+      ],
+      questionsMin: 2,
+      propositions: {
+        forme: 'une seule contrainte atypique ou une absence de contrainte par carte',
+        choix: 'unique',
+        min: 3,
+        max: 4,
+        maxMots: 24,
+        atomiques: true,
+      },
+    },
     configurateur: 'contraintes',
     help: {
       title: "Les contraintes moins visibles que le configurateur ne peut pas deviner.",
       items: [
-        { text: "Une personne ou un comité doit valider avant que le projet avance.", effect: "Conséquence : les validations entrent dans le calendrier et peuvent bloquer une étape." },
+        { text: "Un circuit de validation interne s'applique avant que le projet avance.", effect: "Conséquence : les validations entrent dans le calendrier et peuvent bloquer une étape." },
         { text: "Une règle métier, légale, de sécurité ou d'accessibilité s'impose.", effect: "Conséquence : elle doit être vérifiée et chiffrée avant de choisir la façon de construire." },
         { text: "Le projet dépend d'un prestataire, d'une autorisation ou de données extérieures.", effect: "Conséquence : cette dépendance devient un risque explicite du planning." }
       ]
@@ -358,12 +513,31 @@ export const POINTS: Point[] = [
     intention:
       "le signe concret auquel il verra, dans six mois, que ça valait le coup.",
     q: "Dans six mois, à quoi verrez-vous que ça valait le coup ?",
-    hint: "Un signe concret, quelque chose que vous pourrez constater sans y réfléchir.",
+    hint:
+      "Choisissez un signe que vous pourrez réellement observer, sans inventer aujourd'hui une cible inconnue. Il servira ensuite à vérifier le résultat du projet avec un fait concret, plutôt qu'avec une impression générale.",
     props: [
       "Si je ne passe plus mes dimanches à refaire des programmes, c'est gagné.",
       "Si mes clients ouvrent leur séance sans que j'aie à les relancer.",
       "Si je peux prendre dix clients de plus sans travailler davantage."
     ],
+    entretien: {
+      ouverture:
+        "identifier les signes observables qui permettront de juger le projet utile dans six mois, avec un seul indicateur par carte",
+      axesSuivants: [
+        "la manière de constater l'indicateur, seulement si elle n'est pas évidente",
+        "un ordre de grandeur déjà connu, sans inventer de cible chiffrée",
+      ],
+      questionsMin: 1,
+      propositions: {
+        forme:
+          "un seul indicateur observable par carte, sans inventer de chiffre ou de cible absente du dossier",
+        choix: 'multiple',
+        min: 3,
+        max: 4,
+        maxMots: 20,
+        atomiques: true,
+      },
+    },
     reform: "deux repères mesurables à six mois : la préparation hebdomadaire passe de quatre heures à moins de deux, et huit clients sur dix ouvrent leur séance sans relance de votre part.",
     help: {
       title: "Trois façons de savoir que ça a marché.",
