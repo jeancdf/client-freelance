@@ -9,12 +9,13 @@ import {
 import { CadrageProvider } from './CadrageContext';
 import { applyAccent, applyThemePref, toggleTheme, type ThemePref } from './lib/theme';
 import * as api from './lib/api';
-import { estDemo, estPrestataire, jetonDuLien } from './lib/lien';
+import { estDemo, estInscription, estPrestataire, jetonDuLien } from './lib/lien';
 import { initialState, reducer, type Screen } from './state';
 import { usePersistance } from './usePersistance';
 import { useEntretien } from './useEntretien';
 import { PlanNav } from './components/PlanNav';
 import { Landing } from './screens/Landing';
+import { Inscription } from './screens/Inscription';
 import { Accueil } from './screens/Accueil';
 import { Depart } from './screens/Depart';
 import { Reprise } from './screens/Reprise';
@@ -38,6 +39,7 @@ export interface CadrageProps {
 
 const SCREENS: Record<Screen, ComponentType> = {
   landing: Landing,
+  inscription: Inscription,
   accueil: Accueil,
   depart: Depart,
   reprise: Reprise,
@@ -60,7 +62,12 @@ export function Cadrage({ theme = 'auto', accent, afficherPlan = true }: Cadrage
   // doit jamais tomber sur le dossier d'un client de démonstration.
   const [state, dispatch] = useReducer(reducer, initialState, (depart) => {
     if (token || demo) return depart;
-    return { ...depart, screen: (estPrestataire() ? 'dash' : 'landing') as Screen };
+    const screen = estPrestataire()
+      ? 'dash'
+      : estInscription()
+        ? 'inscription'
+        : 'landing';
+    return { ...depart, screen: screen as Screen };
   });
   const [chargement, setChargement] = useState<Chargement>(
     token ? 'chargement' : 'demonstration',

@@ -24,11 +24,12 @@ npm run build    # typecheck + bundle dans dist/
 
 ## Les écrans
 
-Quatre adresses, et rien d'autre :
+Les adresses principales :
 
 | Adresse | Qui l'ouvre |
 | --- | --- |
-| `/` | Un visiteur venu du site de Nicolas. Il se présente, dit où il en est, et entre dans l'entretien. |
+| `/` | Un visiteur venu du site de Nicolas. Il découvre le cadrage et choisit de commencer. |
+| `/commencer` | Le formulaire public qui recueille les quatre renseignements nécessaires avant la première question. |
 | `/?c=<jeton>` | Le client, sur son dossier. |
 | `/demo` | Une démonstration sur les textes de la maquette, avec le sélecteur « Parcours ». |
 | `/prestataire` | Le tableau de bord, protégé par le jeton d'administration. |
@@ -40,7 +41,8 @@ d'un client de démonstration en croyant que c'est le sien.
 
 | Écran | Fichier | Rôle |
 | --- | --- | --- |
-| Page publique | `src/screens/Landing.tsx` | Ce qu'est le cadrage, et le formulaire qui l'ouvre |
+| Page publique | `src/screens/Landing.tsx` | Ce qu'est le cadrage et l'appel à commencer |
+| Formulaire public | `src/screens/Inscription.tsx` | Les renseignements de départ, sur une page séparée |
 | Point de départ | `src/screens/Depart.tsx` | Où en est le client : la question qui précède le cadrage |
 | Accueil | `src/screens/Accueil.tsx` | Entrée du client invité, et les deux raccourcis |
 | Entretien | `src/screens/Entretien.tsx` | La question en cours, le sommaire, l'aide et l'arbitrage |
@@ -77,7 +79,7 @@ d'un client de démonstration en croyant que c'est le sien.
 ## Ouvrir un cadrage sans invitation
 
 `POST /api/cadrage` est la seule route publique en écriture : elle crée le
-cadrage et rend le lien. C'est ce que fait le formulaire de `/`.
+cadrage et rend le lien. C'est ce que fait le formulaire de `/commencer`.
 
 La première chose demandée n'est pas dans ce formulaire : **où le client en
 est** est la question qui ouvre l'entretien (`src/screens/Depart.tsx`), avant

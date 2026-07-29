@@ -25,6 +25,7 @@ export type { Mode, Voie };
 
 export type Screen =
   | 'landing'
+  | 'inscription'
   | 'accueil'
   | 'depart'
   | 'entretien'

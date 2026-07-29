@@ -23,6 +23,11 @@ export function estDemo(url = window.location.href): boolean {
   return /^\/demo\/?$/.test(new URL(url).pathname);
 }
 
+/** Le formulaire public, volontairement séparé de la page de présentation. */
+export function estInscription(url = window.location.href): boolean {
+  return /^\/commencer\/?$/.test(new URL(url).pathname);
+}
+
 /**
  * Le tableau de bord de Nicolas. Il a son adresse propre : il était atteint par
  * le sélecteur d'écrans, qui ne vit plus que sur `/demo`. Le jeton reste exigé

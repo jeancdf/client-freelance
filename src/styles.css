@@ -493,15 +493,13 @@ input {
   max-width: 1440px;
 }
 
-.landing__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: clamp(36px, 7vw, 84px);
-  align-items: start;
+.landing__hero {
+  max-width: 1120px;
   padding: clamp(48px, 9vh, 112px) 0 0;
 }
 
 .landing__intro {
+  max-width: 1040px;
   min-width: 0;
   animation: rise 0.5s ease-out both;
 }
@@ -557,9 +555,38 @@ input {
   background: var(--accent);
 }
 
-.landing__aside {
-  min-width: 0;
-  animation: rise 0.5s 0.08s ease-out both;
+.landing__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px 24px;
+  margin-top: 42px;
+}
+
+.landing__cta {
+  min-height: 60px;
+  padding: 0 28px;
+  border-bottom: 0;
+  font-size: 17px;
+  gap: 22px;
+}
+
+.landing__cta:hover {
+  color: var(--on-accent);
+  filter: brightness(0.94);
+}
+
+.landing__cta span {
+  font-size: 21px;
+  line-height: 1;
+}
+
+.landing__cta-note {
+  max-width: 43ch;
+  margin: 0;
+  color: var(--ink-45);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 .landing__form {
@@ -570,30 +597,6 @@ input {
   padding: clamp(24px, 3vw, 36px);
   border-radius: 4px;
   box-shadow: 0 24px 70px rgb(27 26 23 / 7%);
-}
-
-.landing__form-head {
-  max-width: 48ch;
-  margin: 0 0 28px;
-}
-
-.landing__form-kicker {
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  margin: 0 0 10px;
-}
-
-.landing__form-title {
-  font-size: clamp(27px, 3vw, 34px);
-  line-height: 1.16;
-  margin: 0 0 10px;
-}
-
-.landing__form-intro {
-  margin: 0;
-  color: var(--ink-70);
-  font-size: 14.5px;
-  line-height: 1.55;
 }
 
 .landing__fields {
@@ -855,17 +858,63 @@ textarea.landing__input {
   border-bottom-color: var(--rule);
 }
 
-@media (min-width: 1100px) {
-  .landing__grid {
-    grid-template-columns: minmax(0, 1.36fr) minmax(440px, 0.82fr);
-  }
+.page--inscription {
+  max-width: 1200px;
 }
 
-@media (min-width: 1100px) and (min-height: 900px) {
-  .landing__aside {
-    position: sticky;
-    top: 24px;
-  }
+.inscription__shell {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: clamp(42px, 8vh, 88px) 0 0;
+}
+
+.inscription__head {
+  max-width: 760px;
+  margin-bottom: clamp(32px, 5vw, 48px);
+}
+
+.inscription__retour {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: clamp(34px, 6vw, 58px);
+  border-bottom-color: var(--rule);
+  color: var(--ink-45);
+  font-size: 13px;
+}
+
+.inscription__retour:hover {
+  color: var(--ink);
+}
+
+.inscription__kicker {
+  margin: 0 0 18px;
+  font-size: 10.5px;
+  letter-spacing: 0.17em;
+}
+
+.inscription__title {
+  max-width: 20ch;
+  margin: 0 0 18px;
+  font-size: clamp(40px, 5.4vw, 62px);
+  line-height: 1.06;
+  letter-spacing: -0.024em;
+}
+
+.inscription__lead {
+  max-width: 61ch;
+  margin: 0;
+  color: var(--ink-70);
+  font-size: 17.5px;
+  line-height: 1.62;
+}
+
+.inscription__form {
+  padding: clamp(24px, 4.5vw, 42px);
+}
+
+.inscription__form textarea.landing__input {
+  min-height: 132px;
 }
 
 @media (max-width: 820px) {
@@ -897,7 +946,7 @@ textarea.landing__input {
 }
 
 @media (max-width: 560px) {
-  .landing__grid {
+  .landing__hero {
     padding-top: 44px;
   }
 
@@ -915,7 +964,17 @@ textarea.landing__input {
     gap: 9px;
   }
 
-  .landing__form {
+  .landing__actions {
+    display: grid;
+    margin-top: 34px;
+  }
+
+  .landing__cta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .inscription__form {
     margin-inline: calc(var(--pad) * -0.45);
     padding: 24px 20px;
   }

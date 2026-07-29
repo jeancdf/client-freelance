@@ -1,100 +1,11 @@
-import { useState } from 'react';
-import { useCadrage } from '../CadrageContext';
 import { SiteHeader } from '../components/Headers';
-import * as api from '../lib/api';
-
-/**
- * La porte d'entrée publique. Un visiteur arrive du site de Nicolas sans avoir
- * jamais parlé à personne : il doit pouvoir ouvrir son cadrage lui-même, sinon
- * la page ne sert qu'à ceux qui ont déjà reçu un lien.
- *
- * Le formulaire envoie directement dans la première question, celle du point de
- * départ : le visiteur a déjà cliqué une fois, on ne lui redemande pas de
- * cliquer sur son propre lien. Celui-ci est posé dans la barre d'adresse, d'où
- * il peut être mis en favori.
- */
-
-interface Champ {
-  cle: 'nom' | 'courriel' | 'metier' | 'demande';
-  libelle: string;
-  aide: string;
-  type?: string;
-  lignes?: number;
-  exemple: string;
-  autocomplete?: string;
-}
-
-const CHAMPS: Champ[] = [
-  {
-    cle: 'demande',
-    libelle: 'Votre projet, en quelques mots',
-    aide:
-      "Décrivez le problème à régler ou le résultat recherché. Vous n'avez pas besoin de connaître déjà la bonne façon de le construire.",
-    lignes: 5,
-    exemple:
-      "Je reçois des demandes pendant mes interventions et j'en oublie certaines avant de pouvoir rappeler.",
-  },
-  {
-    cle: 'metier',
-    libelle: 'Votre activité',
-    aide: 'Elle permet d’adapter les questions à votre quotidien réel.',
-    exemple: 'Plombier indépendant, cabinet de conseil, association…',
-    autocomplete: 'organization-title',
-  },
-  {
-    cle: 'nom',
-    libelle: 'Votre nom',
-    aide: '',
-    exemple: 'Camille Dorval',
-    autocomplete: 'name',
-  },
-  {
-    cle: 'courriel',
-    libelle: 'Votre adresse e-mail',
-    aide: 'Pour que Nicolas puisse vous répondre au sujet de ce projet.',
-    type: 'email',
-    exemple: 'camille@atelier-dorval.fr',
-    autocomplete: 'email',
-  },
-];
-
-const VIDE = { nom: '', courriel: '', metier: '', demande: '' };
 
 export function Landing() {
-  const { dispatch } = useCadrage();
-  const [valeurs, setValeurs] = useState(VIDE);
-  const [etat, setEtat] = useState<'repos' | 'envoi'>('repos');
-  const [erreur, setErreur] = useState<string | null>(null);
-
-  /**
-   * Ouvre le cadrage et entre dans la première question sans rien demander de
-   * plus. Le jeton est posé dans l'URL par `replaceState` plutôt que par une
-   * navigation : le lien est là, prêt à être mis en favori, mais le client n'a
-   * pas à le cliquer — il a déjà cliqué une fois, ça suffit.
-   */
-  async function ouvrir(evenement: React.FormEvent): Promise<void> {
-    evenement.preventDefault();
-    setEtat('envoi');
-    setErreur(null);
-    try {
-      const cree = await api.ouvrirCadrage(valeurs);
-      window.history.replaceState(null, '', `/?c=${cree.token}`);
-
-      // `hydrate` choisit l'écran : un cadrage tout neuf ouvre sur la question
-      // de départ, qui réglera le ton de l'entretien.
-      const session = await api.lireSession(cree.token);
-      dispatch({ type: 'hydrate', token: cree.token, session });
-    } catch (cause) {
-      setErreur(cause instanceof Error ? cause.message : 'Impossible pour le moment.');
-      setEtat('repos');
-    }
-  }
-
   return (
     <main className="page page--landing">
       <SiteHeader />
 
-      <section className="landing__grid" aria-labelledby="landing-title">
+      <section className="landing__hero" aria-labelledby="landing-title">
         <div className="landing__intro">
           <p className="lbl landing__kicker">Cadrage avant devis</p>
           <h1 id="landing-title" className="serif landing__title">
@@ -112,94 +23,18 @@ export function Landing() {
             <li>Aucun compte à créer</li>
             <li>Reprise à tout moment</li>
           </ul>
-        </div>
 
-        <aside className="landing__aside">
-          <form
-            className="landing__form"
-            onSubmit={(e) => void ouvrir(e)}
-            aria-busy={etat === 'envoi'}
-          >
-            <div className="landing__form-head">
-              <p className="lbl landing__form-kicker">Votre point de départ</p>
-              <h2 className="serif landing__form-title">Parlez-moi de votre projet.</h2>
-              <p className="landing__form-intro">
-                Ces quelques repères servent à écrire une première question vraiment adaptée à
-                votre situation.
-              </p>
-            </div>
-
-            <div className="landing__fields">
-              {CHAMPS.map((champ) => {
-                const aideId = champ.aide ? `${champ.cle}-aide` : undefined;
-                return (
-                  <div
-                    key={champ.cle}
-                    className={`landing__champ landing__champ--${champ.cle}`}
-                  >
-                    <label htmlFor={champ.cle} className="landing__label">
-                      {champ.libelle}
-                    </label>
-                    {champ.aide && (
-                      <p id={aideId} className="landing__aide">
-                        {champ.aide}
-                      </p>
-                    )}
-                    {champ.lignes ? (
-                      <textarea
-                        id={champ.cle}
-                        name={champ.cle}
-                        required
-                        rows={champ.lignes}
-                        className="landing__input"
-                        placeholder={champ.exemple}
-                        aria-describedby={aideId}
-                        value={valeurs[champ.cle]}
-                        onChange={(e) =>
-                          setValeurs((v) => ({ ...v, [champ.cle]: e.target.value }))
-                        }
-                      />
-                    ) : (
-                      <input
-                        id={champ.cle}
-                        name={champ.cle}
-                        required
-                        type={champ.type ?? 'text'}
-                        autoComplete={champ.autocomplete}
-                        className="landing__input"
-                        placeholder={champ.exemple}
-                        aria-describedby={aideId}
-                        value={valeurs[champ.cle]}
-                        onChange={(e) =>
-                          setValeurs((v) => ({ ...v, [champ.cle]: e.target.value }))
-                        }
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {erreur && (
-              <p className="landing__erreur" role="alert">
-                {erreur}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="btn btn--primary landing__submit"
-              disabled={etat === 'envoi'}
-            >
-              {etat === 'envoi' ? 'J’ouvre votre dossier…' : 'Ouvrir mon dossier de cadrage'}
-            </button>
-
-            <p className="landing__meta">
-              Après l’envoi, votre lien privé reste dans la barre d’adresse. Il permet
-              d’interrompre l’entretien et de le reprendre plus tard.
+          <div className="landing__actions">
+            <a href="/commencer" className="btn btn--primary landing__cta">
+              Commencer mon cadrage
+              <span aria-hidden="true">→</span>
+            </a>
+            <p className="landing__cta-note">
+              Vous commencerez par quatre renseignements, puis la première question sera adaptée
+              à votre situation.
             </p>
-          </form>
-        </aside>
+          </div>
+        </div>
       </section>
 
       <section className="landing__livrable" aria-labelledby="livrable-title">
