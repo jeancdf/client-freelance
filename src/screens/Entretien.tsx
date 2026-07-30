@@ -273,7 +273,17 @@ export function Entretien() {
     Boolean(state.session) &&
     !configurateurContraintes &&
     !questionConnue(state, index);
-  const propositions = ouverture.propositions;
+  // Dernière barrière contre une ancienne génération en cache ou une réponse
+  // d'API dégradée : une carte de ponctuation seule ne doit jamais atteindre
+  // l'écran, ni pouvoir devenir la réponse du client.
+  const propositions = [
+    ...new Set(
+      ouverture.propositions
+        .filter((proposition): proposition is string => typeof proposition === 'string')
+        .map((proposition) => proposition.trim())
+        .filter((proposition) => proposition.length >= 2 && /[\p{L}\p{N}]/u.test(proposition)),
+    ),
+  ];
   const selection = state.rang === 0 ? point.selection : undefined;
   const selectionInvalide = Boolean(
     selection && (lignes.length < selection.min || lignes.length > selection.max),

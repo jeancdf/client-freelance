@@ -43,7 +43,7 @@ const maintenant = () => new Date().toISOString();
 const empreinte = (entree: string) => createHash('sha256').update(entree).digest('hex').slice(0, 16);
 
 /** Invalide les anciens textes quand leur règle de rédaction évolue. */
-const VERSION_PROMPTS_NEUTRES = 'contrats-sections-atomiques-v4';
+const VERSION_PROMPTS_NEUTRES = 'contrats-sections-atomiques-v5';
 
 interface LigneCadrage {
   id: string;
@@ -198,6 +198,16 @@ const normaliser = (texte: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/**
+ * Une chaîne respecte facilement le schéma JSON tout en ne contenant aucune
+ * réponse (« : », « … », tirets, etc.). On exige donc ici un vrai fragment de
+ * texte, indépendamment des consignes données au modèle.
+ */
+function propositionLisible(texte: string): boolean {
+  const proposition = texte.trim();
+  return proposition.length >= 2 && /\p{L}/u.test(proposition);
+}
+
 function tropProches(a: string, b: string): boolean {
   const motsA = new Set(normaliser(a).split(' ').filter((mot) => mot.length > 2));
   const motsB = new Set(normaliser(b).split(' ').filter((mot) => mot.length > 2));
@@ -268,6 +278,11 @@ export function erreursOuverture(
   if (mots(question).length > 18) erreurs.push('la question dépasse 18 mots');
   if (mots(relance).length < 25 || mots(relance).length > 65) {
     erreurs.push('la relance doit contenir entre 25 et 65 mots');
+  }
+  for (const proposition of propositions) {
+    if (!propositionLisible(proposition)) {
+      erreurs.push('une proposition est vide ou ne contient pas de texte exploitable');
+    }
   }
 
   if (phase === 'ouverture') {
@@ -470,7 +485,7 @@ export function ouverture(db: Base, ligne: LigneCadrage, index: number) {
       return {
         question: valeur.question.trim() || point.q,
         relance: valeur.relance.trim() || point.hint,
-        propositions: valeur.propositions,
+        propositions: valeur.propositions.map((proposition) => proposition.trim()),
         choix: point.entretien.propositions.choix as Choix,
       };
     },
@@ -529,7 +544,7 @@ export function suite(db: Base, ligne: LigneCadrage, index: number, fil: Echange
       return {
         question: valeur.question.trim(),
         relance: valeur.relance.trim(),
-        propositions: valeur.propositions,
+        propositions: valeur.propositions.map((proposition) => proposition.trim()),
         choix: 'unique' as Choix,
       };
     },

@@ -66,6 +66,27 @@ describe('les contrats de génération par section', () => {
 });
 
 describe('la validation éditoriale des réponses probables', () => {
+  it('refuse les propositions vides ou composées uniquement de ponctuation', () => {
+    const point = POINTS[0] as Point;
+    const valeur: OuvertureBrute = {
+      termine: false,
+      question: 'Quel incident a déclenché votre démarche ?',
+      relance:
+        'Décrivez un cas concret vécu récemment dans votre activité. Cette réponse permettra de distinguer le problème principal des conséquences secondaires avant de définir précisément le travail.',
+      choix: 'unique',
+      propositions: [':', '…', '---'],
+    };
+
+    const erreurs = erreursOuverture(
+      point,
+      valeur,
+      contexte,
+      'ouverture',
+    );
+
+    assert.ok(erreurs.some((erreur) => /texte exploitable/i.test(erreur)));
+  });
+
   it('refuse une carte fourre-tout et une personne inventée', () => {
     const point = POINTS[4] as Point;
     const valeur: OuvertureBrute = {
