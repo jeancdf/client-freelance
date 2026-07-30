@@ -275,6 +275,40 @@ describe('réponses', () => {
     assert.equal(session(db, parId(db, ligne.id)!).reponses[String(POINT_TENSION)].arbitre, true);
   });
 
+  it("conserve le choix exact de l'arbitrage puis l'efface avec la réponse", () => {
+    const ligne = nouveau('Arbitrage détaillé');
+    ecrireReponse(db, ligne, POINT_TENSION, {
+      texte: REPONSE_TENSION,
+      clore: true,
+    });
+    const tension = {
+      explication: 'Deux exigences doivent être arbitrées.',
+      optionA: 'Privilégier la simplicité',
+      optionB: 'Privilégier le suivi',
+    };
+    db.prepare(
+      `INSERT INTO generation (cadrage_id, point, genre, cle, contenu, cree_le)
+       VALUES (?, ?, 'tension', 'test', ?, ?)`,
+    ).run(ligne.id, POINT_TENSION, JSON.stringify(tension), new Date().toISOString());
+
+    marquerReponse(db, ligne, POINT_TENSION, {
+      arbitre: true,
+      arbitrage: { choix: 'option_a', libelle: tension.optionA },
+    });
+    assert.deepEqual(
+      session(db, parId(db, ligne.id)!).reponses[String(POINT_TENSION)].arbitrage,
+      { choix: 'option_a', libelle: tension.optionA },
+    );
+
+    ecrireReponse(db, parId(db, ligne.id)!, POINT_TENSION, {
+      texte: 'Réponse corrigée.',
+      clore: true,
+    });
+    const corrigee = session(db, parId(db, ligne.id)!).reponses[String(POINT_TENSION)];
+    assert.equal(corrigee.arbitre, false);
+    assert.equal(corrigee.arbitrage, null);
+  });
+
   it('refuse un point inconnu ou une réponse vide', () => {
     const ligne = nouveau();
     assert.throws(() => ecrireReponse(db, ligne, POINTS.length, { texte: 'x' }), ErreurRequete);

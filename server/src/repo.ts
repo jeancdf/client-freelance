@@ -1,11 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type {
+  Arbitrage,
   CreationCadrage,
   DecisionHorsPerimetre,
   Echange,
   Maturite,
   Fichier,
   LigneCadrage,
+  MarquageReponse,
   Mode,
   PatchSession,
   PutReponse,
@@ -18,6 +20,7 @@ import type {
   Voie,
 } from '../../shared/api.ts';
 import { INDEX_HORS_PERIMETRE, INDEX_PERIMETRE, POINTS } from '../../shared/points.ts';
+import { compteRenduLu } from './compte-rendu.ts';
 import type { Base } from './db.ts';
 
 /** Au-delà, on considère que le client a quitté : le temps ne compte plus. */
@@ -48,6 +51,7 @@ interface LigneBase {
   commence_le: string | null;
   maturite: string;
   courriel: string;
+  compte_rendu_lu_cle: string;
 }
 
 interface LigneReponse {
@@ -56,6 +60,8 @@ interface LigneReponse {
   source: string;
   confirme: number;
   arbitre: number;
+  arbitrage_choix: string | null;
+  arbitrage_texte: string;
   deduction_confirmee: number;
   clos: number;
   maj_le: string;
@@ -118,7 +124,9 @@ export function parId(db: Base, id: string): LigneBase | undefined {
 function reponsesDe(db: Base, cadrageId: string): LigneReponse[] {
   return db
     .prepare(
-      'SELECT point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le FROM reponse WHERE cadrage_id = ? ORDER BY point',
+      `SELECT point, texte, source, confirme, arbitre, arbitrage_choix,
+              arbitrage_texte, deduction_confirmee, clos, maj_le
+       FROM reponse WHERE cadrage_id = ? ORDER BY point`,
     )
     .all(cadrageId) as unknown as LigneReponse[];
 }
@@ -246,6 +254,20 @@ export function session(db: Base, ligne: LigneBase): Session {
       source: r.source === 'document' ? 'document' : 'client',
       confirme: r.confirme === 1,
       arbitre: r.arbitre === 1,
+      arbitrage:
+        r.arbitre === 1
+          ? {
+              choix:
+                r.arbitrage_choix === 'option_a' ||
+                r.arbitrage_choix === 'option_b' ||
+                r.arbitrage_choix === 'les_deux'
+                  ? r.arbitrage_choix
+                  : 'legacy_unknown',
+              libelle:
+                r.arbitrage_texte ||
+                'Décision antérieure dont le choix exact n’a pas été historisé.',
+            }
+          : null,
       deductionConfirmee: r.deduction_confirmee === 1,
       clos: r.clos === 1,
       majLe: r.maj_le,
@@ -280,6 +302,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     reformulations: generations(db, ligne.id, 'reformulation'),
     deductions: generations(db, ligne.id, 'deduction'),
     tensions: tensions(db, ligne.id),
+    compteRenduLu: compteRenduLu(db, ligne),
     horsPerimetre: decisionHorsPerimetre(db, ligne.id),
   };
 }
@@ -489,8 +512,11 @@ function ecrireReponseInterne(
   // identique. `clos` reflète toujours l'écriture courante : réécrire une
   // ancienne réponse sans `clore` rouvre le point.
   db.prepare(
-    `INSERT INTO reponse (cadrage_id, point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `INSERT INTO reponse (
+       cadrage_id, point, texte, source, confirme, arbitre,
+       arbitrage_choix, arbitrage_texte, deduction_confirmee, clos, maj_le
+     )
+     VALUES (?, ?, ?, ?, ?, ?, NULL, '', 0, ?, ?)
      ON CONFLICT (cadrage_id, point) DO UPDATE SET
        texte    = excluded.texte,
        source   = excluded.source,
@@ -500,6 +526,14 @@ function ecrireReponseInterne(
        arbitre  = CASE WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
                        THEN MAX(reponse.arbitre, excluded.arbitre)
                        ELSE excluded.arbitre END,
+       arbitrage_choix = CASE
+         WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
+           THEN reponse.arbitrage_choix
+         ELSE NULL END,
+       arbitrage_texte = CASE
+         WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
+           THEN reponse.arbitrage_texte
+         ELSE '' END,
        deduction_confirmee = CASE WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
                                   THEN reponse.deduction_confirmee
                                   ELSE 0 END,
@@ -537,7 +571,9 @@ function ecrireReponseInterne(
 
   const r = db
     .prepare(
-      'SELECT point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
+      `SELECT point, texte, source, confirme, arbitre, arbitrage_choix,
+              arbitrage_texte, deduction_confirmee, clos, maj_le
+       FROM reponse WHERE cadrage_id = ? AND point = ?`,
     )
     .get(ligne.id, point) as unknown as LigneReponse;
 
@@ -546,6 +582,20 @@ function ecrireReponseInterne(
     source: r.source === 'document' ? 'document' : 'client',
     confirme: r.confirme === 1,
     arbitre: r.arbitre === 1,
+    arbitrage:
+      r.arbitre === 1
+        ? {
+            choix:
+              r.arbitrage_choix === 'option_a' ||
+              r.arbitrage_choix === 'option_b' ||
+              r.arbitrage_choix === 'les_deux'
+                ? r.arbitrage_choix
+                : 'legacy_unknown',
+            libelle:
+              r.arbitrage_texte ||
+              'Décision antérieure dont le choix exact n’a pas été historisé.',
+          }
+        : null,
     deductionConfirmee: r.deduction_confirmee === 1,
     clos: r.clos === 1,
     majLe: r.maj_le,
@@ -561,7 +611,7 @@ export function marquerReponse(
   db: Base,
   ligne: LigneBase,
   point: number,
-  drapeaux: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean },
+  drapeaux: MarquageReponse,
 ): Reponse {
   return dansTransaction(db, () => marquerReponseInterne(db, ligne, point, drapeaux));
 }
@@ -570,25 +620,70 @@ function marquerReponseInterne(
   db: Base,
   ligne: LigneBase,
   point: number,
-  drapeaux: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean },
+  drapeaux: MarquageReponse,
 ): Reponse {
-  for (const [nom, valeur] of Object.entries(drapeaux)) {
+  for (const [nom, valeur] of Object.entries(drapeaux).filter(
+    ([cle]) => cle !== 'arbitrage',
+  )) {
     if (valeur !== undefined && typeof valeur !== 'boolean') {
       throw new ErreurRequete(400, `${nom} doit être un booléen.`);
     }
   }
+  let arbitrage: Arbitrage | null = null;
+  if (drapeaux.arbitrage !== undefined && drapeaux.arbitrage !== null) {
+    const choix = drapeaux.arbitrage.choix;
+    if (!['option_a', 'option_b', 'les_deux'].includes(choix)) {
+      throw new ErreurRequete(400, "Ce choix d'arbitrage n'est pas accepté.");
+    }
+    const tension = tensions(db, ligne.id)[String(point)];
+    if (!tension) {
+      throw new ErreurRequete(409, "Ce point n'a aucune contradiction à arbitrer.");
+    }
+    const libelleAttendu =
+      choix === 'option_a'
+        ? tension.optionA
+        : choix === 'option_b'
+          ? tension.optionB
+          : 'Les deux, j’explique';
+    if (drapeaux.arbitrage.libelle.trim() !== libelleAttendu) {
+      throw new ErreurRequete(400, "Le libellé d'arbitrage ne correspond pas aux choix proposés.");
+    }
+    arbitrage = { choix, libelle: libelleAttendu };
+  }
   const now = maintenant();
+  const avant = db
+    .prepare(
+      `SELECT confirme, arbitre, arbitrage_choix, arbitrage_texte, deduction_confirmee
+       FROM reponse WHERE cadrage_id = ? AND point = ?`,
+    )
+    .get(ligne.id, point) as
+    | {
+        confirme: number;
+        arbitre: number;
+        arbitrage_choix: string | null;
+        arbitrage_texte: string;
+        deduction_confirmee: number;
+      }
+    | undefined;
   // Monotone, comme à l'écriture : un accord ne se retire pas tout seul, il ne
   // retombe qu'avec une réécriture du texte.
   const res = db
     .prepare(
       `UPDATE reponse SET confirme = MAX(confirme, ?), arbitre = MAX(arbitre, ?),
+                           arbitrage_choix = CASE WHEN ? IS NULL
+                             THEN arbitrage_choix ELSE ? END,
+                           arbitrage_texte = CASE WHEN ? IS NULL
+                             THEN arbitrage_texte ELSE ? END,
                            deduction_confirmee = MAX(deduction_confirmee, ?), maj_le = ?
        WHERE cadrage_id = ? AND point = ?`,
     )
     .run(
       drapeaux.confirme ? 1 : 0,
-      drapeaux.arbitre ? 1 : 0,
+      drapeaux.arbitre || arbitrage ? 1 : 0,
+      arbitrage?.choix ?? null,
+      arbitrage?.choix ?? null,
+      arbitrage?.choix ?? null,
+      arbitrage?.libelle ?? '',
       drapeaux.deductionConfirmee ? 1 : 0,
       now,
       ligne.id,
@@ -597,10 +692,21 @@ function marquerReponseInterne(
 
   if (res.changes === 0) throw new ErreurRequete(404, "Ce point n'a pas encore de réponse.");
   db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, ligne.id);
+  const aChange = avant
+    ? (drapeaux.confirme === true && avant.confirme !== 1) ||
+      ((drapeaux.arbitre === true || arbitrage) && avant.arbitre !== 1) ||
+      (arbitrage !== null &&
+        (avant.arbitrage_choix !== arbitrage.choix ||
+          avant.arbitrage_texte !== arbitrage.libelle)) ||
+      (drapeaux.deductionConfirmee === true && avant.deduction_confirmee !== 1)
+    : false;
+  if (aChange) invaliderValidation(db, ligne.id);
 
   const r = db
     .prepare(
-      'SELECT point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
+      `SELECT point, texte, source, confirme, arbitre, arbitrage_choix,
+              arbitrage_texte, deduction_confirmee, clos, maj_le
+       FROM reponse WHERE cadrage_id = ? AND point = ?`,
     )
     .get(ligne.id, point) as unknown as LigneReponse;
 
@@ -609,6 +715,20 @@ function marquerReponseInterne(
     source: r.source === 'document' ? 'document' : 'client',
     confirme: r.confirme === 1,
     arbitre: r.arbitre === 1,
+    arbitrage:
+      r.arbitre === 1
+        ? {
+            choix:
+              r.arbitrage_choix === 'option_a' ||
+              r.arbitrage_choix === 'option_b' ||
+              r.arbitrage_choix === 'les_deux'
+                ? r.arbitrage_choix
+                : 'legacy_unknown',
+            libelle:
+              r.arbitrage_texte ||
+              'Décision antérieure dont le choix exact n’a pas été historisé.',
+          }
+        : null,
     deductionConfirmee: r.deduction_confirmee === 1,
     clos: r.clos === 1,
     majLe: r.maj_le,
@@ -700,7 +820,8 @@ export function poserQuestion(
   ).run(ligne.id, point, rang, question, maintenant());
 }
 
-export function validerDossier(db: Base, ligne: LigneBase): LigneBase {
+/** Vérifie tout ce qui doit être accepté avant de produire ou valider le document final. */
+export function verifierDossierPret(db: Base, ligne: LigneBase): void {
   const reponses = reponsesDe(db, ligne.id);
   const parPoint = new Map(reponses.map((reponse) => [reponse.point, reponse]));
   const decision = decisionHorsPerimetre(db, ligne.id);
@@ -746,7 +867,10 @@ export function validerDossier(db: Base, ligne: LigneBase): LigneBase {
       );
     }
   }
+}
 
+export function validerDossier(db: Base, ligne: LigneBase): LigneBase {
+  verifierDossierPret(db, ligne);
   const now = maintenant();
   db.prepare('UPDATE cadrage SET statut = ?, valide_le = ?, maj_le = ? WHERE id = ?').run(
     'valide',

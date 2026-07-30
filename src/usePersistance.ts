@@ -25,9 +25,12 @@ function instantane(state: State): Instantane {
   const reponses: Record<number, string> = {};
   for (const cle of Object.keys(state.answers)) {
     const index = Number(cle);
-    reponses[index] = `${state.confirmed[index] ? '1' : '0'}${
-      state.tensionResolved[index] ? '1' : '0'
-    }${state.deductionsConfirmed[index] ? '1' : '0'}`;
+    reponses[index] = JSON.stringify({
+      confirme: Boolean(state.confirmed[index]),
+      arbitre: Boolean(state.tensionResolved[index]),
+      arbitrage: state.arbitrages[index] ?? null,
+      deductionConfirmee: Boolean(state.deductionsConfirmed[index]),
+    });
   }
   return {
     mode: state.mode,
@@ -52,12 +55,13 @@ function changements(cible: Instantane, base: Instantane): SauvegardeUrgente {
 
   const reponses = Object.entries(cible.reponses)
     .filter(([index, signature]) => base.reponses[Number(index)] !== signature)
-    .map(([index, signature]) => ({
-      point: Number(index),
-      confirme: signature[0] === '1',
-      arbitre: signature[1] === '1',
-      deductionConfirmee: signature[2] === '1',
-    }));
+    .map(([index, signature]) => {
+      const drapeaux = JSON.parse(signature) as Omit<
+        SauvegardeUrgente['reponses'][number],
+        'point'
+      >;
+      return { point: Number(index), ...drapeaux };
+    });
 
   return { patch: patch as PatchSession, reponses };
 }
@@ -111,6 +115,7 @@ export function usePersistance(state: State): EtatEnregistrement {
           await api.marquerReponse(jeton, reponse.point, {
             confirme: reponse.confirme,
             arbitre: reponse.arbitre,
+            arbitrage: reponse.arbitrage,
             deductionConfirmee: reponse.deductionConfirmee,
           });
         }

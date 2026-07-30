@@ -18,17 +18,26 @@ import type {
   Aide,
   Analyse,
   Choix,
+  CompteRendu,
   DecisionHorsPerimetre,
   Echange,
   Ouverture,
   PointAnalyse,
   Tension,
 } from '../../shared/api.ts';
+import {
+  cleCompteRendu,
+  sourceCompteRendu,
+  sourcePourModele,
+  type LignePourCompteRendu,
+  type SourceCompteRendu,
+} from './compte-rendu.ts';
 import type { Base } from './db.ts';
 import * as llm from './llm.ts';
 import {
   promptAide,
   promptAnalyse,
+  promptCompteRendu,
   promptDeduction,
   promptDecisionHorsPerimetre,
   promptOuverture,
@@ -922,4 +931,211 @@ export async function analyse(db: Base, ligne: LigneCadrage, texteDocuments: str
     console.warn(`[generation] analyse en cache invalide : ${(cause as Error).message}`);
     return { valeur: repliAnalyse(), origine: 'repli' as const };
   }
+}
+
+// --------------------------------------------------------- compte rendu -- //
+
+const SCHEMA_ELEMENT_COMPTE_RENDU = llm.objet({
+  titre: llm.texte,
+  texte: llm.texte,
+  sources: llm.liste(
+    { type: 'integer', minimum: 0, maximum: POINTS.length - 1 },
+    1,
+    POINTS.length,
+  ),
+});
+
+const SCHEMA_COMPTE_RENDU = llm.objet({
+  titre: llm.texte,
+  resumeExecutif: llm.liste(llm.texte, 1, 3),
+  contexte: llm.liste(llm.texte, 0, 5),
+  objectifs: llm.liste(llm.texte, 0, 8),
+  perimetre: llm.liste(llm.texte, 0, 10),
+  personnesEtParcours: llm.liste(llm.texte, 0, 8),
+  contraintesEtDecisions: llm.liste(llm.texte, 0, 10),
+  pointsVigilance: llm.liste(SCHEMA_ELEMENT_COMPTE_RENDU, 0, 8),
+  questionsOuvertes: llm.liste(SCHEMA_ELEMENT_COMPTE_RENDU, 0, 8),
+  recommandations: llm.liste(SCHEMA_ELEMENT_COMPTE_RENDU, 0, 8),
+  prochainesEtapes: llm.liste(llm.texte, 0, 8),
+});
+
+const LIMITES_LISTES: Record<
+  'resumeExecutif' | 'contexte' | 'objectifs' | 'perimetre' | 'personnesEtParcours' | 'contraintesEtDecisions' | 'prochainesEtapes',
+  { min: number; max: number; caracteres: number }
+> = {
+  resumeExecutif: { min: 1, max: 3, caracteres: 700 },
+  contexte: { min: 0, max: 5, caracteres: 500 },
+  objectifs: { min: 0, max: 8, caracteres: 350 },
+  perimetre: { min: 0, max: 10, caracteres: 350 },
+  personnesEtParcours: { min: 0, max: 8, caracteres: 350 },
+  contraintesEtDecisions: { min: 0, max: 10, caracteres: 350 },
+  prochainesEtapes: { min: 0, max: 8, caracteres: 350 },
+};
+
+function listeTexte(
+  valeur: unknown,
+  nom: keyof typeof LIMITES_LISTES,
+): string[] {
+  const limites = LIMITES_LISTES[nom];
+  if (!Array.isArray(valeur) || valeur.length < limites.min || valeur.length > limites.max) {
+    throw new llm.ErreurLlm(`La section « ${nom} » du compte rendu est mal formée.`);
+  }
+  return valeur.map((element) => {
+    if (typeof element !== 'string') {
+      throw new llm.ErreurLlm(`La section « ${nom} » contient autre chose que du texte.`);
+    }
+    const texte = element.trim();
+    if (!texte || texte.length > limites.caracteres) {
+      throw new llm.ErreurLlm(`Un élément de « ${nom} » est vide ou trop long.`);
+    }
+    return texte;
+  });
+}
+
+function elementsAnalytiques(
+  valeur: unknown,
+  nom: 'pointsVigilance' | 'questionsOuvertes' | 'recommandations',
+  pointsAutorises: Set<number>,
+): CompteRendu[typeof nom] {
+  if (!Array.isArray(valeur) || valeur.length > 8) {
+    throw new llm.ErreurLlm(`La section « ${nom} » du compte rendu est mal formée.`);
+  }
+  return valeur.map((element) => {
+    const brut = element as { titre?: unknown; texte?: unknown; sources?: unknown };
+    if (
+      typeof brut?.titre !== 'string' ||
+      typeof brut?.texte !== 'string' ||
+      !Array.isArray(brut.sources)
+    ) {
+      throw new llm.ErreurLlm(`Un élément de « ${nom} » est incomplet.`);
+    }
+    const titre = brut.titre.trim();
+    const texte = brut.texte.trim();
+    const sources = [...new Set(brut.sources)];
+    if (
+      !titre ||
+      titre.length > 140 ||
+      !texte ||
+      texte.length > 700 ||
+      sources.length === 0 ||
+      sources.some((point) => !Number.isInteger(point) || !pointsAutorises.has(point as number))
+    ) {
+      throw new llm.ErreurLlm(`Un élément de « ${nom} » n'est pas vérifiable.`);
+    }
+    return { titre, texte, sources: sources as number[] };
+  });
+}
+
+export function normaliserCompteRendu(
+  valeur: CompteRendu,
+  source: SourceCompteRendu,
+): CompteRendu {
+  if (!valeur || typeof valeur !== 'object' || typeof valeur.titre !== 'string') {
+    throw new llm.ErreurLlm('Le compte rendu est absent ou mal formé.');
+  }
+  const titre = valeur.titre.trim();
+  if (!titre || titre.length > 140) {
+    throw new llm.ErreurLlm('Le titre du compte rendu est vide ou trop long.');
+  }
+
+  const pointsAutorises = new Set(source.points.map((point) => point.index));
+  const normalise: CompteRendu = {
+    titre,
+    resumeExecutif: listeTexte(valeur.resumeExecutif, 'resumeExecutif'),
+    contexte: listeTexte(valeur.contexte, 'contexte'),
+    objectifs: listeTexte(valeur.objectifs, 'objectifs'),
+    perimetre: listeTexte(valeur.perimetre, 'perimetre'),
+    personnesEtParcours: listeTexte(valeur.personnesEtParcours, 'personnesEtParcours'),
+    contraintesEtDecisions: listeTexte(
+      valeur.contraintesEtDecisions,
+      'contraintesEtDecisions',
+    ),
+    pointsVigilance: elementsAnalytiques(
+      valeur.pointsVigilance,
+      'pointsVigilance',
+      pointsAutorises,
+    ),
+    questionsOuvertes: elementsAnalytiques(
+      valeur.questionsOuvertes,
+      'questionsOuvertes',
+      pointsAutorises,
+    ),
+    recommandations: elementsAnalytiques(
+      valeur.recommandations,
+      'recommandations',
+      pointsAutorises,
+    ),
+    prochainesEtapes: listeTexte(valeur.prochainesEtapes, 'prochainesEtapes'),
+  };
+
+  const sortie = JSON.stringify(normalise);
+  const entree = JSON.stringify(source);
+  if (
+    contientDesignationFamilialeGenree(sortie) ||
+    contientPersonneInventee([sortie], entree) ||
+    contientPrecisionInventee(sortie, entree)
+  ) {
+    throw new llm.ErreurLlm('Le compte rendu contient une précision absente de ses sources.');
+  }
+  return normalise;
+}
+
+export async function compteRendu(
+  db: Base,
+  ligne: LigneCadrage & LignePourCompteRendu,
+): Promise<{
+  compteRendu: CompteRendu;
+  origine: 'cache' | 'modele';
+  genereLe: string;
+}> {
+  const source = sourceCompteRendu(db, ligne);
+  const cle = cleCompteRendu(db, ligne);
+  const resultat = await obtenir<CompteRendu>(
+    db,
+    ligne.id,
+    -1,
+    'compte-rendu',
+    cle,
+    async () => {
+      const { valeur } = await llm.generer<CompteRendu>(
+        promptCompteRendu(sourcePourModele(source)),
+        'compte_rendu',
+        SCHEMA_COMPTE_RENDU,
+        { temperature: 0.3, maxTokens: 5_000 },
+      );
+      return normaliserCompteRendu(valeur, source);
+    },
+    () => {
+      throw new llm.ErreurLlm(
+        "Le service d'IA est indispensable pour produire ce compte rendu.",
+      );
+    },
+  );
+
+  if (resultat.origine === 'repli') {
+    throw new llm.ErreurLlm("Le compte rendu n'a pas pu être généré.");
+  }
+
+  let normalise: CompteRendu;
+  try {
+    normalise = normaliserCompteRendu(resultat.valeur, source);
+  } catch (cause) {
+    if (resultat.origine !== 'cache') throw cause;
+    db.prepare(
+      "DELETE FROM generation WHERE cadrage_id = ? AND point = -1 AND genre = 'compte-rendu'",
+    ).run(ligne.id);
+    return compteRendu(db, ligne);
+  }
+
+  const cache = db
+    .prepare(
+      "SELECT cree_le FROM generation WHERE cadrage_id = ? AND point = -1 AND genre = 'compte-rendu' AND cle = ?",
+    )
+    .get(ligne.id, cle) as { cree_le: string } | undefined;
+
+  return {
+    compteRendu: normalise,
+    origine: resultat.origine,
+    genereLe: cache?.cree_le ?? maintenant(),
+  };
 }

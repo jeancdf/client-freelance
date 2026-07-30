@@ -68,6 +68,9 @@ describe('navigation entre les questions', () => {
       draft: 'Réponse corrigée',
       confirmed: { 0: true },
       tensionResolved: { 0: true },
+      arbitrages: {
+        0: { choix: 'option_a', libelle: 'Ancien arbitrage' },
+      },
       deductions: { 0: 'Ancienne déduction' },
       reformulations: { 0: 'Ancienne reformulation' },
     };
@@ -97,6 +100,7 @@ describe('navigation entre les questions', () => {
     assert.equal(corrige.clos[0], undefined);
     assert.equal(corrige.confirmed[0], undefined);
     assert.equal(corrige.tensionResolved[0], undefined);
+    assert.equal(corrige.arbitrages[0], undefined);
     assert.equal(corrige.deductions[0], undefined);
     assert.equal(corrige.reformulations[0], undefined);
     assert.equal(corrige.echanges[0].length, 2);
@@ -124,6 +128,7 @@ describe('reprise d’une correction', () => {
           source: 'client',
           confirme: true,
           arbitre: false,
+          arbitrage: null,
           deductionConfirmee: false,
           clos: true,
           majLe: '2026-07-29T10:00:00.000Z',
@@ -144,6 +149,7 @@ describe('reprise d’une correction', () => {
       reformulations: {},
       deductions: {},
       tensions: {},
+      compteRenduLu: false,
       horsPerimetre: null,
     };
 
@@ -187,6 +193,7 @@ describe('reprise d’une correction', () => {
         valideLe: null,
         dureeMs: 60_000,
         fichiers: [],
+        compteRenduLu: true,
       },
     };
 
@@ -195,5 +202,17 @@ describe('reprise d’une correction', () => {
     assert.equal(repris.step, 6);
     assert.equal(repris.tension, true);
     assert.deepEqual(repris.tensionCourante, tension);
+
+    const tranche = reducer(repris, {
+      type: 'resolveTension',
+      arbitrage: { choix: 'option_b', libelle: tension.optionB },
+    });
+    assert.equal(tranche.tension, false);
+    assert.equal(tranche.tensionResolved[6], true);
+    assert.deepEqual(tranche.arbitrages[6], {
+      choix: 'option_b',
+      libelle: tension.optionB,
+    });
+    assert.equal(tranche.session?.compteRenduLu, false);
   });
 });

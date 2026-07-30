@@ -7,6 +7,7 @@ import {
 } from '../shared/points';
 import type {
   Aide,
+  Arbitrage,
   Choix,
   Client,
   DecisionHorsPerimetre,
@@ -58,6 +59,7 @@ export interface SessionMeta {
   valideLe: string | null;
   dureeMs: number;
   fichiers: Fichier[];
+  compteRenduLu: boolean;
 }
 
 export interface State {
@@ -74,6 +76,8 @@ export interface State {
   confirmed: Record<number, boolean>;
   /** Points dont l'arbitrage a déjà été rendu : on ne le redemande pas. */
   tensionResolved: Record<number, boolean>;
+  /** Choix exact retenu face à chaque contradiction. */
+  arbitrages: Record<number, Arbitrage>;
   /** Points dont le fil est terminé. Un fil ouvert se reprend là où il en est. */
   clos: Record<number, boolean>;
   help: boolean;
@@ -137,6 +141,7 @@ export const initialState: State = {
   sources: {},
   confirmed: {},
   tensionResolved: {},
+  arbitrages: {},
   clos: {},
   help: false,
   tension: false,
@@ -199,11 +204,11 @@ export type Action =
   | { type: 'openHelp' }
   | { type: 'closeHelp' }
   | { type: 'pickHelp'; text: string }
-  | { type: 'tensionSimple' }
-  | { type: 'tensionKeep' }
+  | { type: 'resolveTension'; arbitrage: Arbitrage }
   | { type: 'confirmReform' }
   | { type: 'rejectReform' }
   | { type: 'confirmDeduction'; point: number }
+  | { type: 'compteRenduLu' }
   | { type: 'togglePlan' }
   | { type: 'switchCourt' }
   | { type: 'goScreen'; screen: Screen }
@@ -407,8 +412,14 @@ function sansPoint<T>(source: Record<number, T>, point: number): Record<number, 
 
 /** Reflète immédiatement l'invalidation que le serveur applique à une modification de fond. */
 function dossierAModifier(state: State): SessionMeta | null {
-  if (!state.session || state.session.statut === 'en_cours') return state.session;
-  return { ...state.session, statut: 'en_cours', valideLe: null };
+  if (!state.session) return null;
+  return {
+    ...state.session,
+    compteRenduLu: false,
+    ...(state.session.statut === 'valide'
+      ? { statut: 'en_cours' as const, valideLe: null }
+      : {}),
+  };
 }
 
 function sansBrouillonsDepuis(
@@ -541,6 +552,7 @@ export function reducer(state: State, action: Action): State {
       const sources: Record<number, SourceReponse> = {};
       const confirmed: Record<number, boolean> = {};
       const tensionResolved: Record<number, boolean> = {};
+      const arbitrages: Record<number, Arbitrage> = {};
       const deductionsConfirmed: Record<number, boolean> = {};
       const clos: Record<number, boolean> = {};
       const echanges: Record<number, Echange[]> = {};
@@ -551,6 +563,7 @@ export function reducer(state: State, action: Action): State {
         sources[index] = reponse.source ?? 'client';
         if (reponse.confirme) confirmed[index] = true;
         if (reponse.arbitre) tensionResolved[index] = true;
+        if (reponse.arbitrage) arbitrages[index] = reponse.arbitrage;
         if (reponse.deductionConfirmee) deductionsConfirmed[index] = true;
         if (reponse.clos) clos[index] = true;
       }
@@ -584,6 +597,7 @@ export function reducer(state: State, action: Action): State {
           valideLe: s.valideLe,
           dureeMs: s.dureeMs,
           fichiers: s.fichiers,
+          compteRenduLu: s.compteRenduLu,
         },
         horsPerimetre: s.horsPerimetre,
         mode: s.mode,
@@ -657,7 +671,8 @@ export function reducer(state: State, action: Action): State {
      */
     case 'suite': {
       const point = action.point;
-      const texteChange = state.answers[point] !== action.texte;
+      const texteChange =
+        state.answers[point] !== action.texte || state.sources[point] !== action.source;
       const session = texteChange ? dossierAModifier(state) : state.session;
       const drafts = sansBrouillonsDepuis(state.drafts, point, state.rang);
       const confirmed = texteChange
@@ -666,6 +681,9 @@ export function reducer(state: State, action: Action): State {
       const tensionResolved = texteChange
         ? sansPoint(state.tensionResolved, point)
         : state.tensionResolved;
+      const arbitrages = texteChange
+        ? sansPoint(state.arbitrages, point)
+        : state.arbitrages;
       const deductionsConfirmed = texteChange
         ? sansPoint(state.deductionsConfirmed, point)
         : state.deductionsConfirmed;
@@ -689,6 +707,7 @@ export function reducer(state: State, action: Action): State {
           },
           confirmed,
           tensionResolved,
+          arbitrages,
           deductionsConfirmed,
           clos: sansPoint(state.clos, point),
           deductions: texteChange
@@ -718,6 +737,7 @@ export function reducer(state: State, action: Action): State {
         echanges: { ...state.echanges, [point]: action.echanges },
         confirmed,
         tensionResolved,
+        arbitrages,
         deductionsConfirmed,
         clos: { ...state.clos, [point]: true },
         deductions: action.deduction
@@ -794,6 +814,7 @@ export function reducer(state: State, action: Action): State {
         sources: {},
         confirmed: {},
         tensionResolved: {},
+        arbitrages: {},
         deductions: {},
         deductionsConfirmed: {},
         reformulations: {},
@@ -815,6 +836,7 @@ export function reducer(state: State, action: Action): State {
         sources: {},
         confirmed: {},
         tensionResolved: {},
+        arbitrages: {},
         deductions: {},
         deductionsConfirmed: {},
         reformulations: {},
@@ -858,6 +880,9 @@ export function reducer(state: State, action: Action): State {
       const tensionResolved = texteChange
         ? sansPoint(state.tensionResolved, i)
         : state.tensionResolved;
+      const arbitrages = texteChange
+        ? sansPoint(state.arbitrages, i)
+        : state.arbitrages;
       const deductionsConfirmed = texteChange
         ? sansPoint(state.deductionsConfirmed, i)
         : state.deductionsConfirmed;
@@ -884,6 +909,7 @@ export function reducer(state: State, action: Action): State {
           },
           confirmed,
           tensionResolved,
+          arbitrages,
           deductionsConfirmed,
           clos: sansPoint(state.clos, i),
           deductions: texteChange ? sansPoint(state.deductions, i) : state.deductions,
@@ -915,6 +941,7 @@ export function reducer(state: State, action: Action): State {
           echanges: { ...state.echanges, [i]: fil },
           confirmed,
           tensionResolved,
+          arbitrages,
           deductionsConfirmed,
           clos: { ...state.clos, [i]: true },
           drafts,
@@ -930,6 +957,7 @@ export function reducer(state: State, action: Action): State {
         echanges: { ...state.echanges, [i]: fil },
         confirmed,
         tensionResolved,
+        arbitrages,
         deductionsConfirmed,
         clos: { ...state.clos, [i]: true },
         deductions: texteChange ? sansPoint(state.deductions, i) : state.deductions,
@@ -987,35 +1015,36 @@ export function reducer(state: State, action: Action): State {
       );
     }
 
-    // « La simplicité passe d'abord » : la réponse bascule sur l'autre priorité.
-    case 'tensionSimple': {
-      // Sur un dossier réel, on ne substitue rien aux mots du client : la
-      // proposition de repli est celle d'un autre métier. On note l'arbitrage,
-      // le texte reste le sien.
-      if (state.session) {
-        return { ...state, tension: false, tensionResolved: { ...state.tensionResolved, [i]: true } };
-      }
-
-      const fallback = POINTS[i].props[1];
-      return {
+    case 'resolveTension': {
+      const resolu: State = {
         ...state,
-        answers: { ...state.answers, [i]: fallback },
-        draft: fallback,
+        session: state.session ? dossierAModifier(state) : state.session,
         tension: false,
         tensionResolved: { ...state.tensionResolved, [i]: true },
+        arbitrages: { ...state.arbitrages, [i]: action.arbitrage },
       };
+      // Dans la démonstration seulement, la première option remplace le texte
+      // par la réponse de repli prévue par la maquette.
+      if (!state.session && action.arbitrage.choix === 'option_a') {
+        const fallback = POINTS[i].props[1];
+        return {
+          ...resolu,
+          answers: { ...resolu.answers, [i]: fallback },
+          draft: fallback,
+        };
+      }
+      return resolu;
     }
 
-    // Le client maintient sa réponse, ou préfère s'expliquer de vive voix.
-    case 'tensionKeep':
-      return {
-        ...state,
-        tension: false,
-        tensionResolved: { ...state.tensionResolved, [i]: true },
-      };
-
     case 'confirmReform':
-      return advance({ ...state, confirmed: { ...state.confirmed, [i]: true } }, i);
+      return advance(
+        {
+          ...state,
+          session: state.session ? dossierAModifier(state) : state.session,
+          confirmed: { ...state.confirmed, [i]: true },
+        },
+        i,
+      );
 
     case 'rejectReform':
       return goQuestion(state, i, dernierRangRepondu(state, i) ?? 0);
@@ -1023,11 +1052,17 @@ export function reducer(state: State, action: Action): State {
     case 'confirmDeduction':
       return {
         ...state,
+        session: state.session ? dossierAModifier(state) : state.session,
         deductionsConfirmed: {
           ...state.deductionsConfirmed,
           [action.point]: true,
         },
       };
+
+    case 'compteRenduLu':
+      return state.session
+        ? { ...state, session: { ...state.session, compteRenduLu: true } }
+        : state;
 
     case 'togglePlan':
       return { ...state, planOpen: !state.planOpen };

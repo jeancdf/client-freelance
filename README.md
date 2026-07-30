@@ -10,9 +10,10 @@ tour parce qu'ils portent une décision distincte. Toute question suivante est
 La partie « Hors périmètre » n'existe que si le client a lui-même évoqué un
 besoin supplémentaire. Le client écrit avec ses mots ou clique parmi des
 réponses probables — une seule ou plusieurs, selon ce que la question appelle.
-L'outil reformule et fait valider, relève les contradictions, et produit un
-récapitulatif où l'on distingue toujours ce que le client a dit, ce qu'il a
-validé, et ce qui a été déduit sans lui.
+L'outil reformule et fait valider, relève les contradictions, puis propose deux
+lectures finales : les sources fidèles et un compte rendu IA structuré comme un
+résumé de réunion. Une correction invalide automatiquement cette dernière
+version.
 
 ## Lancer
 
@@ -48,7 +49,7 @@ d'un client de démonstration en croyant que c'est le sien.
 | Entretien | `src/screens/Entretien.tsx` | La question en cours, le sommaire, l'aide et l'arbitrage |
 | Reformulation | `src/screens/Reformulation.tsx` | « Si je comprends bien : … », à confirmer avant d'avancer |
 | Chemin rapide | `src/screens/Rapide.tsx` | Dépôt d'un cahier des charges, lu par le modèle, et ce qu'il manque |
-| Récapitulatif | `src/screens/Recap.tsx` | Le dossier relu et validé par le client |
+| Récapitulatif | `src/screens/Recap.tsx` | Les réponses sources et le compte rendu IA, avec export PDF |
 | Fin | `src/screens/Fin.tsx` | Accusé de transmission |
 | Reprise | `src/screens/Reprise.tsx` | Retour après interruption |
 | Déroulé | `src/screens/Deroule.tsx` | Coulisses : ce que la machine fait de chaque réponse |
@@ -133,6 +134,7 @@ capacités, toutes côté serveur — la clé ne touche jamais le navigateur :
 | Déduction | Ce qu'on peut poser sans le demander |
 | Décision hors périmètre | Si un besoin supplémentaire explicite justifie d'afficher le point VI |
 | Analyse | Quels points utiles un document déposé couvre déjà |
+| Compte rendu | Une synthèse éditoriale : contexte, périmètre, décisions, risques et prochaines étapes |
 
 Deux partis pris, mesurés :
 
@@ -146,15 +148,18 @@ Tout est mis en cache dans la table `generation`, par empreinte de l'entrée : u
 client qui recharge revoit les mêmes propositions, et une réponse réécrite
 regénère sa reformulation. Deux requêtes pour la même génération se croisent
 facilement — le préchargement et l'ouverture réelle d'un point : la seconde
-attend la première au lieu de payer un second appel. Le récapitulatif lit ce cache plutôt que la mémoire
-de l'onglet : le document livré cite la reformulation du client, y compris
-après un rechargement.
+attend la première au lieu de payer un second appel. Le récapitulatif et le
+compte rendu lisent ce cache plutôt que la mémoire de l'onglet. Le compte rendu
+porte l'empreinte des réponses, reformulations confirmées, déductions acceptées
+et arbitrages : une modification ne peut donc pas laisser passer une ancienne
+version.
 
-**Sans clé, l'application marche.** Elle conserve les questions neutres et les
-étapes déterministes, mais masque les réponses probables, reformulations et
-déductions écrites pour le cas de démonstration. Chaque repli est tracé dans le
-journal (`[generation] repli sur …`) : une dégradation silencieuse serait une
-panne invisible.
+**Sans clé, l'entretien reste utilisable mais la validation finale est
+bloquée.** Les questions neutres et les étapes déterministes continuent de
+fonctionner, mais le compte rendu obligatoire n'a volontairement aucun repli
+sans IA. Les autres replis sont tracés dans le journal
+(`[generation] repli sur …`) : une dégradation silencieuse serait une panne
+invisible.
 
 Un repli n'est normalement jamais mis en cache : il ne fige pas une version
 dégradée, mais il ne survit pas non plus au rechargement. Seule la décision de
@@ -219,7 +224,8 @@ sans relance supplémentaire. C'est la soupape.
 ## L'attente
 
 Écrire un point pour un métier prend quatre à six secondes, lire un document
-déposé une quinzaine. Une règle, tenue partout :
+déposé ou rédiger le compte rendu final peut prendre une quinzaine de secondes.
+Une règle, tenue partout :
 
 > Ce qui est connu s'affiche tout de suite ; ce qui est écrit pour ce client
 > n'apparaît qu'écrit ; les textes de la maquette sont un repli de panne, jamais

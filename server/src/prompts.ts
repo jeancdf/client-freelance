@@ -9,6 +9,7 @@
 
 import { POINTS, type Point } from '../../shared/points.ts';
 import type { Echange, Maturite } from '../../shared/api.ts';
+import type { SourceModeleCompteRendu } from './compte-rendu.ts';
 import type { Message } from './llm.ts';
 
 export interface Contexte {
@@ -415,6 +416,51 @@ Pour un point NON COUVERT :
 - "manque" : une phrase disant ce qui manque et pourquoi ça compte pour le devis. Tu t'adresses au client.
 
 Sois exigeant : un point n'est couvert que si le document répond vraiment à la question, pas s'il l'effleure.`,
+    },
+  ];
+}
+
+// --------------------------------------------------------- compte rendu -- //
+
+/**
+ * Le document final n'est pas une transcription : il hiérarchise les faits
+ * acceptés, puis sépare explicitement l'analyse et les propositions.
+ */
+export function promptCompteRendu(source: SourceModeleCompteRendu): Message[] {
+  return [
+    { role: 'system', content: VOIX },
+    {
+      role: 'user',
+      content: `Rédige le compte rendu professionnel de ce cadrage.
+
+Le document sera lu à la fois par le client et par Nicolas avant le chiffrage.
+Il doit ressembler à un compte rendu de réunion clair, pas à une succession de réponses au questionnaire.
+
+Source autorisée :
+${JSON.stringify(source, null, 2)}
+
+Règles de fond :
+- Les réponses, reformulations confirmées, déductions confirmées et arbitrages ci-dessus sont les seules sources factuelles.
+- Ne transforme jamais une recommandation en décision prise.
+- N'invente aucun chiffre, délai, budget, personne, rôle, logiciel, fonctionnalité ou contrainte.
+- Une information absente devient une question ouverte, jamais une supposition.
+- Un arbitrage "legacy_unknown" devient une question ouverte indiquant que le choix exact n'a pas été historisé.
+- Un arbitrage "les_deux" reste un point à expliciter, sauf si la réponse contient déjà cette explication.
+- Les recommandations doivent rester optionnelles, concrètes et utiles à la préparation du projet.
+- Chaque point de vigilance, question ouverte et recommandation cite dans "sources" un ou plusieurs index réellement présents dans la source.
+- N'écris jamais le nom du client : il sera ajouté localement dans la mise en page.
+
+Règles éditoriales :
+- "titre" : 4 à 10 mots, spécifique au projet.
+- "resumeExecutif" : 1 à 3 paragraphes courts donnant le problème, la direction retenue et l'enjeu principal.
+- Les listes factuelles utilisent des phrases autonomes et courtes.
+- "pointsVigilance" distingue les risques ou contradictions qui peuvent modifier le périmètre, le délai ou le devis.
+- "questionsOuvertes" contient seulement ce qui doit encore être décidé.
+- "recommandations" propose des pistes d'approche, sans engager Nicolas ni le client.
+- "prochainesEtapes" décrit des actions réalistes après ce cadrage, sans promettre de date ni de livrable absent.
+- Laisse une liste vide quand la source ne permet pas de remplir honnêtement une section.
+
+Le ton est sobre, direct et concret. Aucun jargon de consultant.`,
     },
   ];
 }

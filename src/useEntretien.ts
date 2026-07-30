@@ -4,6 +4,7 @@ import {
   INDEX_PERIMETRE,
   POINTS,
 } from '../shared/points';
+import type { Arbitrage } from '../shared/api';
 import * as api from './lib/api';
 import type { Action, State } from './state';
 import { currentIndex, ouvertureOf } from './state';
@@ -20,8 +21,8 @@ export interface Entretien {
   soumettre: () => Promise<void>;
   /** Accepte la reformulation, puis avance. */
   confirmer: () => Promise<void>;
-  /** Tranche la contradiction : bascule sur l'autre priorité, ou maintient. */
-  trancher: (choix: 'bascule' | 'maintien') => Promise<void>;
+  /** Tranche la contradiction et conserve le libellé réellement choisi. */
+  trancher: (arbitrage: Arbitrage) => Promise<void>;
   /** Déclare le point complet : pas de question de suite. */
   clore: () => Promise<void>;
   /** Dernière erreur d'écriture, affichée sans effacer le brouillon. */
@@ -250,8 +251,8 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
   }, [dispatch]);
 
   const trancher = useCallback(
-    async (choix: 'bascule' | 'maintien') => {
-      dispatch({ type: choix === 'bascule' ? 'tensionSimple' : 'tensionKeep' });
+    async (arbitrage: Arbitrage) => {
+      dispatch({ type: 'resolveTension', arbitrage });
     },
     [dispatch],
   );

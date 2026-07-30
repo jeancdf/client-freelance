@@ -17,12 +17,15 @@ import {
 import type {
   AideGeneree,
   AnalyseGeneree,
+  CompteRenduGenere,
+  MarquageReponse,
   OuvertureGeneree,
   PatchSession,
   PutReponse,
   SauvegardeUrgente,
   SuiteReponse,
 } from '../../../shared/api.ts';
+import { cleCompteRendu, compteRenduLu } from '../compte-rendu.ts';
 import * as generation from '../generation.ts';
 import { estActif as modeleActif } from '../llm.ts';
 import { config, dossierFichiers } from '../config.ts';
@@ -43,6 +46,7 @@ import {
   session,
   supprimerFichier,
   validerDossier,
+  verifierDossierPret,
 } from '../repo.ts';
 
 /** Ce qu'on sait lire tel quel. Le reste est signalé au client, pas ignoré. */
@@ -187,6 +191,7 @@ export function routesClient(app: FastifyInstance, db: Base): void {
           marquerReponse(db, ligne, exigerPoint(String(reponse.point)), {
             confirme: reponse.confirme,
             arbitre: reponse.arbitre,
+            arbitrage: reponse.arbitrage ?? null,
             deductionConfirmee: reponse.deductionConfirmee,
           });
         }
@@ -314,7 +319,7 @@ export function routesClient(app: FastifyInstance, db: Base): void {
    */
   app.patch<{
     Params: ParamsToken & { point: string };
-    Body: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean };
+    Body: MarquageReponse;
   }>(
     '/api/cadrage/:token/reponse/:point',
     async (req) => {
@@ -511,10 +516,85 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     },
   );
 
+  /**
+   * Produit le document éditorial à partir des seules informations acceptées.
+   * Le cache est lié à leur empreinte : une correction ne peut jamais afficher
+   * silencieusement l'ancienne version.
+   */
+  app.post<{ Params: ParamsToken }>(
+    '/api/cadrage/:token/compte-rendu',
+    async (req): Promise<CompteRenduGenere> => {
+      const ligne = charger(req.params.token);
+      verifierDossierPret(db, ligne);
+      const cleAvant = cleCompteRendu(db, ligne);
+      const dejaGenere = db
+        .prepare(
+          "SELECT 1 FROM generation WHERE cadrage_id = ? AND point = -1 AND genre = 'compte-rendu' AND cle = ?",
+        )
+        .get(ligne.id, cleAvant);
+      if (!dejaGenere) limiterGenerations(req.params.token, 12);
+
+      let resultat: CompteRenduGenere;
+      try {
+        resultat = await generation.compteRendu(db, ligne);
+      } catch (cause) {
+        req.log.warn({ cause, cadrage: ligne.id }, 'compte rendu IA indisponible');
+        throw new ErreurRequete(
+          503,
+          "Le compte rendu IA n'a pas pu être généré. Réessayez dans quelques instants.",
+        );
+      }
+
+      const apres = charger(req.params.token);
+      const cleApres = cleCompteRendu(db, apres);
+      if (cleApres !== cleAvant) {
+        throw new ErreurRequete(
+          409,
+          'Le dossier a changé pendant la rédaction. Relancez le compte rendu.',
+        );
+      }
+      return resultat;
+    },
+  );
+
+  /** Accusé distinct : recevoir les octets ne suffit pas à prouver l'ouverture de l'onglet. */
+  app.post<{ Params: ParamsToken }>(
+    '/api/cadrage/:token/compte-rendu/lu',
+    async (req, reply) => {
+      const ligne = charger(req.params.token);
+      verifierDossierPret(db, ligne);
+      const cle = cleCompteRendu(db, ligne);
+      const existe = db
+        .prepare(
+          "SELECT 1 FROM generation WHERE cadrage_id = ? AND point = -1 AND genre = 'compte-rendu' AND cle = ?",
+        )
+        .get(ligne.id, cle);
+      if (!existe) {
+        throw new ErreurRequete(
+          409,
+          'Le compte rendu courant doit être généré avant de pouvoir être marqué comme lu.',
+        );
+      }
+      db.prepare('UPDATE cadrage SET compte_rendu_lu_cle = ? WHERE id = ?').run(
+        cle,
+        ligne.id,
+      );
+      reply.code(204);
+      return null;
+    },
+  );
+
   // Le dossier reste modifiable après validation : l'écran de fin le promet
   // explicitement (« le lien reste ouvert jusqu'au rendez-vous »).
   app.post<{ Params: ParamsToken }>('/api/cadrage/:token/valider', async (req) => {
-    const ligne = validerDossier(db, charger(req.params.token));
+    const courant = charger(req.params.token);
+    if (!compteRenduLu(db, courant)) {
+      throw new ErreurRequete(
+        409,
+        'Ouvrez le compte rendu IA correspondant aux réponses actuelles avant de valider.',
+      );
+    }
+    const ligne = validerDossier(db, courant);
     return { statut: ligne.statut, valideLe: ligne.valide_le, dureeMs: ligne.duree_ms };
   });
 

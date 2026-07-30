@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { SuiteReponse } from '../../shared/api.ts';
+import type { CompteRendu, SuiteReponse } from '../../shared/api.ts';
 import {
   INDEX_CONTRAINTES,
   INDEX_HORS_PERIMETRE,
@@ -15,6 +15,7 @@ import {
   serialiserContraintes,
 } from '../../shared/points.ts';
 import { ouvrirBase, type Base } from './db.ts';
+import { cleCompteRendu } from './compte-rendu.ts';
 import { brancherErreurs } from './erreurs.ts';
 import { creer, ecrireReponse, parId, session } from './repo.ts';
 import { routesClient } from './routes/client.ts';
@@ -60,6 +61,7 @@ describe('les questions successives d’un point', () => {
             point: 0,
             confirme: true,
             arbitre: false,
+            arbitrage: null,
             deductionConfirmee: false,
           },
         ],
@@ -472,5 +474,89 @@ describe('les questions successives d’un point', () => {
     assert.equal(importee.source, 'document');
     assert.equal(importee.confirme, true);
     assert.equal(importee.clos, true);
+  });
+
+  it('impose la lecture de la version courante du compte rendu avant validation', async () => {
+    const ligne = creer(db, {
+      nom: 'Camille compte rendu',
+      metier: 'artisan',
+      demande: 'Centraliser les demandes reçues',
+    });
+    for (const point of [0, 1, 2, 3, 4, 6, 7]) {
+      ecrireReponse(db, parId(db, ligne.id)!, point, {
+        texte: `Réponse complète du point ${point}`,
+        confirme: true,
+        clore: true,
+      });
+    }
+
+    const avantLecture = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/valider`,
+    });
+    assert.equal(avantLecture.statusCode, 409);
+    const sansModele = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/compte-rendu`,
+    });
+    assert.equal(sansModele.statusCode, 503);
+
+    const compteRendu: CompteRendu = {
+      titre: 'Centraliser les demandes reçues',
+      resumeExecutif: ['Le dossier rassemble les réponses acceptées du cadrage.'],
+      contexte: ['Les demandes reçues doivent être centralisées.'],
+      objectifs: ['Rassembler les demandes reçues.'],
+      perimetre: [],
+      personnesEtParcours: [],
+      contraintesEtDecisions: [],
+      pointsVigilance: [],
+      questionsOuvertes: [
+        {
+          titre: 'Détail restant',
+          texte: 'Un détail du parcours reste à préciser.',
+          sources: [0],
+        },
+      ],
+      recommandations: [],
+      prochainesEtapes: ['Préparer le chiffrage à partir du cadrage.'],
+    };
+    const courant = parId(db, ligne.id)!;
+    const cle = cleCompteRendu(db, courant);
+    db.prepare(
+      `INSERT INTO generation (cadrage_id, point, genre, cle, contenu, cree_le)
+       VALUES (?, -1, 'compte-rendu', ?, ?, ?)`,
+    ).run(ligne.id, cle, JSON.stringify(compteRendu), new Date().toISOString());
+
+    const lecture = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/compte-rendu`,
+    });
+    assert.equal(lecture.statusCode, 200);
+    assert.equal(lecture.json<{ origine: string }>().origine, 'cache');
+    assert.equal(session(db, parId(db, ligne.id)!).compteRenduLu, false);
+    const accuseLecture = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/compte-rendu/lu`,
+    });
+    assert.equal(accuseLecture.statusCode, 204);
+    assert.equal(session(db, parId(db, ligne.id)!).compteRenduLu, true);
+
+    const validation = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/valider`,
+    });
+    assert.equal(validation.statusCode, 200);
+
+    ecrireReponse(db, parId(db, ligne.id)!, 0, {
+      texte: 'Réponse corrigée après lecture.',
+      confirme: true,
+      clore: true,
+    });
+    assert.equal(session(db, parId(db, ligne.id)!).compteRenduLu, false);
+    const apresCorrection = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/valider`,
+    });
+    assert.equal(apresCorrection.statusCode, 409);
   });
 });

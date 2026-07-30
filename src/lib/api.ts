@@ -2,9 +2,11 @@ import type {
   AideGeneree,
   AnalyseGeneree,
   CadrageCree,
+  CompteRenduGenere,
   CreationCadrage,
   Fichier,
   Inscription,
+  MarquageReponse,
   OuvertureGeneree,
   PatchSession,
   PutReponse,
@@ -90,7 +92,7 @@ export const ecrireReponse = (token: string, point: number, entree: PutReponse) 
 export const marquerReponse = (
   token: string,
   point: number,
-  drapeaux: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean },
+  drapeaux: MarquageReponse,
 ) => requete<Reponse>(`/cadrage/${token}/reponse/${point}`, json('PATCH', drapeaux));
 
 export const lireOuverture = (token: string, point: number, rang = 0) =>
@@ -109,6 +111,15 @@ export const appliquerAnalyse = (token: string) =>
   requete<{ appliques: number[] }>(`/cadrage/${token}/analyse/appliquer`, {
     method: 'POST',
   });
+
+/** Génère ou relit la version éditoriale correspondant au dossier courant. */
+export const lireCompteRendu = (token: string) =>
+  requete<CompteRenduGenere>(`/cadrage/${token}/compte-rendu`, {
+    method: 'POST',
+  });
+
+export const marquerCompteRenduLu = (token: string) =>
+  requete<void>(`/cadrage/${token}/compte-rendu/lu`, { method: 'POST' });
 
 export const validerDossier = (token: string) =>
   requete<{ statut: 'valide'; valideLe: string; dureeMs: number }>(

@@ -7,13 +7,17 @@ import {
 } from '../../shared/points.ts';
 import {
   erreursOuverture,
+  normaliserCompteRendu,
   type OuvertureBrute,
 } from './generation.ts';
 import {
+  promptCompteRendu,
   promptOuverture,
   promptSuite,
   type Contexte,
 } from './prompts.ts';
+import type { CompteRendu } from '../../shared/api.ts';
+import type { SourceCompteRendu } from './compte-rendu.ts';
 
 const contexte: Contexte = {
   nom: 'Camille',
@@ -116,5 +120,78 @@ describe('la validation éditoriale des réponses probables', () => {
     assert.ok(erreurs.some((erreur) => /invente un proche/i.test(erreur)));
     assert.ok(erreurs.some((erreur) => /désignation familiale genrée/i.test(erreur)));
     assert.ok(erreurs.some((erreur) => /invente un chiffre ou un logiciel/i.test(erreur)));
+  });
+});
+
+describe('le compte rendu final', () => {
+  const source: SourceCompteRendu = {
+    activite: 'plombier',
+    demande: 'Ne plus perdre les demandes reçues pendant les chantiers',
+    maturite: 'idee',
+    mode: 'long',
+    points: [
+      {
+        index: 0,
+        numero: 'I',
+        titre: 'Le déclencheur',
+        reponse: 'Je perds des demandes reçues pendant les chantiers.',
+        source: 'client',
+      },
+    ],
+    references: { liens: [], fichiers: [] },
+  };
+  const valide: CompteRendu = {
+    titre: 'Suivre les demandes reçues',
+    resumeExecutif: ['Le projet doit éviter la perte des demandes pendant les chantiers.'],
+    contexte: ['Les demandes reçues pendant les chantiers peuvent être perdues.'],
+    objectifs: ['Conserver les demandes reçues.'],
+    perimetre: [],
+    personnesEtParcours: [],
+    contraintesEtDecisions: [],
+    pointsVigilance: [],
+    questionsOuvertes: [
+      {
+        titre: 'Parcours à préciser',
+        texte: 'La suite du traitement reste à préciser.',
+        sources: [0],
+      },
+    ],
+    recommandations: [],
+    prochainesEtapes: ['Préciser la suite du traitement des demandes.'],
+  };
+
+  it('sépare les faits, les analyses et les propositions dans le prompt', () => {
+    const prompt = promptCompteRendu({
+      ...source,
+      references: { nombreLiens: 0, nombreFichiers: 0 },
+    })
+      .map((message) => String(message.content))
+      .join('\n');
+
+    assert.match(prompt, /seules sources factuelles/i);
+    assert.match(prompt, /recommandation en décision prise/i);
+    assert.match(prompt, /question ouverte/i);
+    assert.doesNotMatch(prompt, /Camille/);
+  });
+
+  it('refuse une référence absente et une précision logicielle inventée', () => {
+    assert.doesNotThrow(() => normaliserCompteRendu(valide, source));
+    assert.throws(
+      () =>
+        normaliserCompteRendu(
+          {
+            ...valide,
+            recommandations: [
+              {
+                titre: 'Centraliser dans Excel',
+                texte: 'Excel pourrait recevoir les demandes.',
+                sources: [7],
+              },
+            ],
+          },
+          source,
+        ),
+      /vérifiable|précision absente/i,
+    );
   });
 });

@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS cadrage (
   maturite      TEXT NOT NULL DEFAULT '',
   cree_le       TEXT NOT NULL,
   maj_le        TEXT NOT NULL,
-  valide_le     TEXT
+  valide_le     TEXT,
+  compte_rendu_lu_cle TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS cadrage_maj_le ON cadrage (maj_le DESC);
@@ -42,6 +43,8 @@ CREATE TABLE IF NOT EXISTS reponse (
   source     TEXT NOT NULL DEFAULT 'client',
   confirme   INTEGER NOT NULL DEFAULT 0,
   arbitre    INTEGER NOT NULL DEFAULT 0,
+  arbitrage_choix TEXT,
+  arbitrage_texte TEXT NOT NULL DEFAULT '',
   deduction_confirmee INTEGER NOT NULL DEFAULT 0,
   clos       INTEGER NOT NULL DEFAULT 0,
   maj_le     TEXT NOT NULL,
@@ -117,6 +120,19 @@ const AJOUTS: Array<{ table: string; colonne: string; definition: string }> = [
   },
   // Position exacte dans le fil, utile quand le client corrige une ancienne réponse.
   { table: 'cadrage', colonne: 'rang', definition: 'INTEGER' },
+  // Empreinte du compte rendu effectivement ouvert pour les réponses courantes.
+  {
+    table: 'cadrage',
+    colonne: 'compte_rendu_lu_cle',
+    definition: "TEXT NOT NULL DEFAULT ''",
+  },
+  // Le booléen `arbitre` historique ne disait pas quelle option avait été choisie.
+  { table: 'reponse', colonne: 'arbitrage_choix', definition: 'TEXT' },
+  {
+    table: 'reponse',
+    colonne: 'arbitrage_texte',
+    definition: "TEXT NOT NULL DEFAULT ''",
+  },
 ];
 
 function migrer(db: DatabaseSync): void {

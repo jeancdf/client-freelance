@@ -37,6 +37,15 @@ export interface Echange {
 /** Origine vérifiable du texte retenu dans le dossier. */
 export type SourceReponse = 'client' | 'document';
 
+/** Décision prise face à une contradiction détectée dans le dossier. */
+export type ChoixArbitrage = 'option_a' | 'option_b' | 'les_deux' | 'legacy_unknown';
+
+export interface Arbitrage {
+  choix: ChoixArbitrage;
+  /** Libellé réellement présenté et choisi, conservé même si le prompt évolue. */
+  libelle: string;
+}
+
 export interface Reponse {
   /** Les mots du client, ou une synthèse explicitement acceptée de son document. */
   texte: string;
@@ -46,6 +55,8 @@ export interface Reponse {
   confirme: boolean;
   /** L'arbitrage a été rendu : on ne le redemande pas. */
   arbitre: boolean;
+  /** Choix exact quand il a pu être historisé ; `null` si aucun arbitrage. */
+  arbitrage: Arbitrage | null;
   /** Le client a confirmé l'hypothèse affichée comme déduction. */
   deductionConfirmee: boolean;
   /** Le fil de questions sur ce point est terminé : il ne se rouvre pas seul. */
@@ -111,6 +122,8 @@ export interface Session {
   deductions: Record<string, string>;
   /** Contradictions encore consultables après un rechargement. */
   tensions: Record<string, Tension>;
+  /** Le compte rendu correspondant aux réponses courantes a été ouvert avec succès. */
+  compteRenduLu: boolean;
   /** `null` tant que le périmètre n'a pas encore été évalué. */
   horsPerimetre: DecisionHorsPerimetre | null;
 }
@@ -137,8 +150,16 @@ export interface SauvegardeUrgente {
     point: number;
     confirme: boolean;
     arbitre: boolean;
+    arbitrage: Arbitrage | null;
     deductionConfirmee: boolean;
   }>;
+}
+
+export interface MarquageReponse {
+  confirme?: boolean;
+  arbitre?: boolean;
+  arbitrage?: Arbitrage | null;
+  deductionConfirmee?: boolean;
 }
 
 export interface PutReponse {
@@ -303,6 +324,35 @@ export interface AnalyseGeneree extends Analyse {
   fichiersIllisibles: string[];
   /** Même décision conditionnelle que dans l'entretien guidé. */
   horsPerimetre: DecisionHorsPerimetre;
+}
+
+/** Bloc analytique justifié par un ou plusieurs points du cadrage. */
+export interface ElementCompteRendu {
+  titre: string;
+  texte: string;
+  /** Index des points sources, jamais des numéros inventés par le modèle. */
+  sources: number[];
+}
+
+/** Document éditorial produit à partir des seules informations acceptées. */
+export interface CompteRendu {
+  titre: string;
+  resumeExecutif: string[];
+  contexte: string[];
+  objectifs: string[];
+  perimetre: string[];
+  personnesEtParcours: string[];
+  contraintesEtDecisions: string[];
+  pointsVigilance: ElementCompteRendu[];
+  questionsOuvertes: ElementCompteRendu[];
+  recommandations: ElementCompteRendu[];
+  prochainesEtapes: string[];
+}
+
+export interface CompteRenduGenere {
+  compteRendu: CompteRendu;
+  origine: 'cache' | 'modele';
+  genereLe: string;
 }
 
 export interface CadrageCree {

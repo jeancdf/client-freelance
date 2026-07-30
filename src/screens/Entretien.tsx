@@ -405,23 +405,38 @@ export function Entretien() {
                 <button
                   type="button"
                   className="btn btn--soft tension__btn"
-                  onClick={() => void entretien.trancher('bascule')}
+                  onClick={() =>
+                    void entretien.trancher({
+                      choix: 'option_a',
+                      libelle: state.tensionCourante?.optionA ?? MAQUETTE_TENSION.optionA,
+                    })
+                  }
                 >
                   {state.tensionCourante?.optionA ?? MAQUETTE_TENSION.optionA}
                 </button>
                 <button
                   type="button"
                   className="btn btn--soft tension__btn"
-                  onClick={() => void entretien.trancher('maintien')}
+                  onClick={() =>
+                    void entretien.trancher({
+                      choix: 'option_b',
+                      libelle: state.tensionCourante?.optionB ?? MAQUETTE_TENSION.optionB,
+                    })
+                  }
                 >
                   {state.tensionCourante?.optionB ?? MAQUETTE_TENSION.optionB}
                 </button>
                 <button
                   type="button"
                   className="btn btn--underline tension__btn"
-                  onClick={() => void entretien.trancher('maintien')}
+                  onClick={() =>
+                    void entretien.trancher({
+                      choix: 'les_deux',
+                      libelle: 'Les deux, j’explique',
+                    })
+                  }
                 >
-                  Les deux, j'explique
+                  Les deux, j’explique
                 </button>
               </div>
             </div>
