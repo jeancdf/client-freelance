@@ -11,6 +11,7 @@ interface Champ {
   lignes?: number;
   exemple: string;
   autocomplete?: string;
+  max: number;
 }
 
 const CHAMPS: Champ[] = [
@@ -22,6 +23,7 @@ const CHAMPS: Champ[] = [
     lignes: 4,
     exemple:
       "Je reçois des demandes pendant mes interventions et j'en oublie certaines avant de pouvoir rappeler.",
+    max: 600,
   },
   {
     cle: 'metier',
@@ -29,6 +31,7 @@ const CHAMPS: Champ[] = [
     aide: 'Elle permet d’adapter les questions à votre quotidien réel.',
     exemple: 'Plombier indépendant, cabinet de conseil, association…',
     autocomplete: 'organization-title',
+    max: 140,
   },
   {
     cle: 'nom',
@@ -36,6 +39,7 @@ const CHAMPS: Champ[] = [
     aide: 'Le nom à utiliser dans votre dossier.',
     exemple: 'Camille Dorval',
     autocomplete: 'name',
+    max: 80,
   },
   {
     cle: 'courriel',
@@ -44,6 +48,7 @@ const CHAMPS: Champ[] = [
     type: 'email',
     exemple: 'camille@atelier-dorval.fr',
     autocomplete: 'email',
+    max: 160,
   },
 ];
 
@@ -115,6 +120,7 @@ export function Inscription() {
                       className="landing__input"
                       placeholder={champ.exemple}
                       aria-describedby={aideId}
+                      maxLength={champ.max}
                       value={valeurs[champ.cle]}
                       onChange={(event) =>
                         setValeurs((actuelles) => ({
@@ -133,6 +139,7 @@ export function Inscription() {
                       className="landing__input"
                       placeholder={champ.exemple}
                       aria-describedby={aideId}
+                      maxLength={champ.max}
                       value={valeurs[champ.cle]}
                       onChange={(event) =>
                         setValeurs((actuelles) => ({
@@ -163,6 +170,13 @@ export function Inscription() {
 
           <p className="landing__meta">
             Aucun compte à créer. Votre lien de reprise restera dans la barre d’adresse.
+          </p>
+          <p className="landing__meta">
+            Vos réponses et documents sont enregistrés pour préparer votre demande. Leur contenu
+            peut être transmis au service d’IA configuré par Studio Cazals pour l’analyse et la
+            reformulation. Vous pouvez demander leur suppression à{' '}
+            <a href="mailto:nicolas@studiocazals.fr">nicolas@studiocazals.fr</a> ; les copies de
+            sauvegarde expirent ensuite avec leur rotation (14 jours en production).
           </p>
         </form>
       </section>

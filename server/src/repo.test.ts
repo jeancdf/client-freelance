@@ -38,6 +38,17 @@ after(() => {
 
 const nouveau = (nom = 'Camille Dorval') => creer(db, { nom, metier: 'coach', demande: 'une appli' });
 
+function completer(base: Base, ligne: ReturnType<typeof nouveau>): void {
+  for (const point of [0, 1, 2, 3, 4, 6, 7]) {
+    ecrireReponse(base, parId(base, ligne.id)!, point, {
+      texte: `Réponse complète ${point}`,
+      confirme: true,
+      arbitre: true,
+      clore: true,
+    });
+  }
+}
+
 describe('le fil d’un point', () => {
   it('rassemble les réponses du fil dans l’ordre, une par ligne', () => {
     const ligne = nouveau('Fil');
@@ -224,6 +235,20 @@ describe('réponses', () => {
     ecrireReponse(db, ligne, 0, { texte: 'Je perds mes dimanches.' });
 
     assert.equal(session(db, parId(db, ligne.id)!).reponses['0'].texte, 'Je perds mes dimanches.');
+    assert.equal(session(db, parId(db, ligne.id)!).reponses['0'].source, 'client');
+  });
+
+  it("identifie une synthèse de document sans la présenter comme les mots du client", () => {
+    const ligne = nouveau();
+    ecrireReponse(
+      db,
+      ligne,
+      0,
+      { texte: 'Le document décrit trois heures perdues.', clore: true },
+      'document',
+    );
+
+    assert.equal(session(db, ligne).reponses['0'].source, 'document');
   });
 
   it('garde la confirmation quand le texte ne change pas', () => {
@@ -258,13 +283,48 @@ describe('réponses', () => {
 });
 
 describe('validation', () => {
+  it('refuse un dossier incomplet', () => {
+    const ligne = nouveau('Validation incomplète');
+    ecrireReponse(db, ligne, 0, { texte: 'Un seul point.', clore: true });
+
+    assert.throws(
+      () => validerDossier(db, ligne),
+      (erreur: unknown) => erreur instanceof ErreurRequete && erreur.code === 409,
+    );
+  });
+
+  it("conserve l'accord sur une déduction et le retire si la réponse change", () => {
+    const ligne = nouveau();
+    ecrireReponse(db, ligne, 0, { texte: 'Version initiale.' });
+    marquerReponse(db, ligne, 0, { deductionConfirmee: true });
+    assert.equal(session(db, ligne).reponses['0'].deductionConfirmee, true);
+
+    ecrireReponse(db, ligne, 0, { texte: 'Version corrigée.' });
+    assert.equal(session(db, ligne).reponses['0'].deductionConfirmee, false);
+  });
+
   it('garde la première date de validation', () => {
     const ligne = nouveau();
+    completer(db, ligne);
     const premiere = validerDossier(db, ligne).valide_le;
     const seconde = validerDossier(db, parId(db, ligne.id)!).valide_le;
 
     assert.equal(seconde, premiere);
     assert.equal(parId(db, ligne.id)!.statut, 'valide');
+  });
+
+  it('redemande une validation après une modification de fond', () => {
+    const ligne = nouveau('Validation invalidée');
+    completer(db, ligne);
+    validerDossier(db, parId(db, ligne.id)!);
+
+    ecrireReponse(db, parId(db, ligne.id)!, 0, {
+      texte: 'Une nouvelle version.',
+      clore: true,
+    });
+
+    assert.equal(parId(db, ligne.id)!.statut, 'en_cours');
+    assert.equal(parId(db, ligne.id)!.valide_le, null);
   });
 });
 
@@ -320,7 +380,8 @@ describe('tableau du prestataire', () => {
   it('ne montre pas de point en cours sur un dossier validé', () => {
     const seule = baseIsolee();
     const ligne = creer(seule, { nom: 'Camille' });
-    validerDossier(seule, ligne);
+    completer(seule, ligne);
+    validerDossier(seule, parId(seule, ligne.id)!);
 
     assert.equal(lister(seule).cadrages[0].enCours, null);
     assert.equal(lister(seule).stats.aChiffrer, 1);

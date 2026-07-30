@@ -76,6 +76,7 @@ describe('navigation entre les questions', () => {
       type: 'suite',
       point: 0,
       texte: 'Réponse corrigée',
+      source: 'client',
       question: {
         question: 'Nouvelle deuxième question ?',
         relance: 'Une précision adaptée.',
@@ -120,8 +121,10 @@ describe('reprise d’une correction', () => {
       reponses: {
         '0': {
           texte: 'Première réponse\nDeuxième réponse',
+          source: 'client',
           confirme: true,
           arbitre: false,
+          deductionConfirmee: false,
           clos: true,
           majLe: '2026-07-29T10:00:00.000Z',
         },
@@ -140,6 +143,7 @@ describe('reprise d’une correction', () => {
       dureeMs: 60_000,
       reformulations: {},
       deductions: {},
+      tensions: {},
       horsPerimetre: null,
     };
 
@@ -157,5 +161,39 @@ describe('reprise d’une correction', () => {
     assert.equal(repris.step, 0);
     assert.equal(repris.rang, 1);
     assert.equal(repris.draft, 'Deuxième réponse en cours de correction');
+  });
+
+  it('rouvre un arbitrage généré avant de poursuivre le questionnaire', () => {
+    const tension = {
+      explication: 'Le délai contredit le périmètre.',
+      optionA: 'Réduire le périmètre.',
+      optionB: 'Décaler la date.',
+    };
+    const state: State = {
+      ...initialState,
+      screen: 'reprise',
+      step: 6,
+      answers: { 6: 'Livraison immédiate.' },
+      clos: { 6: true },
+      tensions: { 6: tension },
+      session: {
+        token: 'token',
+        client: { nom: 'Camille', metier: 'coach', demande: 'une application' },
+        statut: 'en_cours',
+        rang: null,
+        maturite: 'forme',
+        creeLe: '2026-07-29T09:00:00.000Z',
+        majLe: '2026-07-29T10:00:00.000Z',
+        valideLe: null,
+        dureeMs: 60_000,
+        fichiers: [],
+      },
+    };
+
+    const repris = reducer(state, { type: 'resumeAt3' });
+    assert.equal(repris.screen, 'entretien');
+    assert.equal(repris.step, 6);
+    assert.equal(repris.tension, true);
+    assert.deepEqual(repris.tensionCourante, tension);
   });
 });

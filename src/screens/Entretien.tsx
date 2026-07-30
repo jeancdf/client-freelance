@@ -136,6 +136,7 @@ function ConfigurateurContraintes({
               id="contrainte-delai"
               type="text"
               className="contraintes-config__input"
+              maxLength={600}
               value={configuration.delai}
               onChange={(event) => changer('delai', event.target.value)}
               placeholder="Ex. Avant le 15 septembre, ou à définir"
@@ -151,6 +152,7 @@ function ConfigurateurContraintes({
               id="contrainte-budget"
               type="text"
               className="contraintes-config__input"
+              maxLength={600}
               value={configuration.budget}
               onChange={(event) => changer('budget', event.target.value)}
               placeholder="Ex. 8 000 à 12 000 €, ou à définir"
@@ -171,6 +173,7 @@ function ConfigurateurContraintes({
               id="contrainte-technologies"
               type="text"
               className="contraintes-config__input"
+              maxLength={600}
               value={configuration.technologies}
               onChange={(event) => changer('technologies', event.target.value)}
               placeholder="Ex. WordPress imposé, connexion à Abby, ou aucune"
@@ -201,7 +204,7 @@ function ConfigurateurContraintes({
       <div className="answer__footer">
         <p className="note answer__saved">
           {sessionReelle
-            ? 'Enregistré à chaque mot · fermez cette page, le lien vous ramènera ici'
+            ? 'Enregistrement automatique · fermez cette page, le lien vous ramènera ici'
             : "Démonstration — rien n'est enregistré sur cet écran"}
         </p>
         {modeLong && (
@@ -539,6 +542,7 @@ export function Entretien() {
                 <textarea
                   id="rep"
                   rows={6}
+                  maxLength={20_000}
                   className="answer__input"
                   value={state.draft}
                   onChange={(e) => dispatch({ type: 'setDraft', value: e.target.value })}
@@ -594,7 +598,7 @@ export function Entretien() {
               <div className="answer__footer">
                 <p className="note answer__saved">
                   {state.session
-                    ? 'Enregistré à chaque mot · fermez cette page, le lien vous ramènera ici'
+                    ? 'Enregistrement automatique · fermez cette page, le lien vous ramènera ici'
                     : "Démonstration — rien n'est enregistré sur cet écran"}
                 </p>
                 {state.mode === 'long' && (
@@ -610,6 +614,12 @@ export function Entretien() {
               </>
               )}
               </div>
+            )}
+
+            {entretien.erreur && (
+              <p className="rapide__erreur" role="alert">
+                {entretien.erreur} Votre brouillon est conservé.
+              </p>
             )}
 
             {state.help && (

@@ -39,8 +39,10 @@ CREATE TABLE IF NOT EXISTS reponse (
   cadrage_id TEXT NOT NULL REFERENCES cadrage(id) ON DELETE CASCADE,
   point      INTEGER NOT NULL,
   texte      TEXT NOT NULL,
+  source     TEXT NOT NULL DEFAULT 'client',
   confirme   INTEGER NOT NULL DEFAULT 0,
   arbitre    INTEGER NOT NULL DEFAULT 0,
+  deduction_confirmee INTEGER NOT NULL DEFAULT 0,
   clos       INTEGER NOT NULL DEFAULT 0,
   maj_le     TEXT NOT NULL,
   PRIMARY KEY (cadrage_id, point)
@@ -105,6 +107,14 @@ const AJOUTS: Array<{ table: string; colonne: string; definition: string }> = [
   { table: 'cadrage', colonne: 'maturite', definition: "TEXT NOT NULL DEFAULT ''" },
   // Un point dont le fil est terminé ne se rouvre pas au rechargement.
   { table: 'reponse', colonne: 'clos', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  // Distingue une citation du client d'une synthèse tirée de son document.
+  { table: 'reponse', colonne: 'source', definition: "TEXT NOT NULL DEFAULT 'client'" },
+  // L'accord sur une hypothèse affichée au récapitulatif doit survivre au rechargement.
+  {
+    table: 'reponse',
+    colonne: 'deduction_confirmee',
+    definition: 'INTEGER NOT NULL DEFAULT 0',
+  },
   // Position exacte dans le fil, utile quand le client corrige une ancienne réponse.
   { table: 'cadrage', colonne: 'rang', definition: 'INTEGER' },
 ];

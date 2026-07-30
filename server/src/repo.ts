@@ -11,8 +11,10 @@ import type {
   PutReponse,
   Reponse,
   Session,
+  SourceReponse,
   StatsCadrages,
   Statut,
+  Tension,
   Voie,
 } from '../../shared/api.ts';
 import { INDEX_HORS_PERIMETRE, INDEX_PERIMETRE, POINTS } from '../../shared/points.ts';
@@ -45,13 +47,16 @@ interface LigneBase {
   valide_le: string | null;
   commence_le: string | null;
   maturite: string;
+  courriel: string;
 }
 
 interface LigneReponse {
   point: number;
   texte: string;
+  source: string;
   confirme: number;
   arbitre: number;
+  deduction_confirmee: number;
   clos: number;
   maj_le: string;
 }
@@ -66,6 +71,25 @@ interface LigneFichier {
 }
 
 const maintenant = () => new Date().toISOString();
+
+/** Les écritures composées doivent être atomiques, y compris quand elles s'appellent entre elles. */
+const transactionsActives = new WeakSet<Base>();
+
+export function dansTransaction<T>(db: Base, action: () => T): T {
+  if (transactionsActives.has(db)) return action();
+  db.exec('BEGIN IMMEDIATE');
+  transactionsActives.add(db);
+  try {
+    const resultat = action();
+    db.exec('COMMIT');
+    return resultat;
+  } catch (cause) {
+    db.exec('ROLLBACK');
+    throw cause;
+  } finally {
+    transactionsActives.delete(db);
+  }
+}
 
 export function nouveauJeton(): string {
   return randomBytes(24).toString('base64url');
@@ -94,7 +118,7 @@ export function parId(db: Base, id: string): LigneBase | undefined {
 function reponsesDe(db: Base, cadrageId: string): LigneReponse[] {
   return db
     .prepare(
-      'SELECT point, texte, confirme, arbitre, clos, maj_le FROM reponse WHERE cadrage_id = ? ORDER BY point',
+      'SELECT point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le FROM reponse WHERE cadrage_id = ? ORDER BY point',
     )
     .all(cadrageId) as unknown as LigneReponse[];
 }
@@ -157,6 +181,36 @@ function generations(db: Base, cadrageId: string, genre: string): Record<string,
   return par;
 }
 
+/** Contradictions structurées encore nécessaires à une reprise de session. */
+function tensions(db: Base, cadrageId: string): Record<string, Tension> {
+  const lignes = db
+    .prepare("SELECT point, contenu FROM generation WHERE cadrage_id = ? AND genre = 'tension'")
+    .all(cadrageId) as unknown as Array<{ point: number; contenu: string }>;
+  const resultat: Record<string, Tension> = {};
+
+  for (const ligne of lignes) {
+    try {
+      const valeur = JSON.parse(ligne.contenu) as Partial<Tension> | null;
+      if (
+        valeur &&
+        typeof valeur.explication === 'string' &&
+        valeur.explication.trim() &&
+        typeof valeur.optionA === 'string' &&
+        typeof valeur.optionB === 'string'
+      ) {
+        resultat[String(ligne.point)] = {
+          explication: valeur.explication,
+          optionA: valeur.optionA,
+          optionB: valeur.optionB,
+        };
+      }
+    } catch {
+      // Une génération corrompue ne doit pas empêcher l'ouverture du dossier.
+    }
+  }
+  return resultat;
+}
+
 /** La décision conditionnelle qui fait exister, ou non, le point VI. */
 function decisionHorsPerimetre(
   db: Base,
@@ -189,15 +243,22 @@ export function session(db: Base, ligne: LigneBase): Session {
   for (const r of reponsesDe(db, ligne.id)) {
     reponses[String(r.point)] = {
       texte: r.texte,
+      source: r.source === 'document' ? 'document' : 'client',
       confirme: r.confirme === 1,
       arbitre: r.arbitre === 1,
+      deductionConfirmee: r.deduction_confirmee === 1,
       clos: r.clos === 1,
       majLe: r.maj_le,
     };
   }
 
   return {
-    client: { nom: ligne.client_nom, metier: ligne.client_metier, demande: ligne.demande },
+    client: {
+      nom: ligne.client_nom,
+      metier: ligne.client_metier,
+      demande: ligne.demande,
+      courriel: ligne.courriel || undefined,
+    },
     mode: ligne.mode as Mode,
     voie: ligne.voie as Voie,
     step: ligne.step,
@@ -218,6 +279,7 @@ export function session(db: Base, ligne: LigneBase): Session {
     dureeMs: ligne.duree_ms,
     reformulations: generations(db, ligne.id, 'reformulation'),
     deductions: generations(db, ligne.id, 'deduction'),
+    tensions: tensions(db, ligne.id),
     horsPerimetre: decisionHorsPerimetre(db, ligne.id),
   };
 }
@@ -235,8 +297,23 @@ export interface Provenance {
 }
 
 export function creer(db: Base, entree: CreationCadrage, provenance?: Provenance): LigneBase {
-  const nom = entree.nom.trim();
+  if (!entree || typeof entree.nom !== 'string') {
+    throw new ErreurRequete(400, 'Le nom du client est obligatoire.');
+  }
+  if (entree.metier !== undefined && typeof entree.metier !== 'string') {
+    throw new ErreurRequete(400, "L'activité doit être du texte.");
+  }
+  if (entree.demande !== undefined && typeof entree.demande !== 'string') {
+    throw new ErreurRequete(400, 'La demande doit être du texte.');
+  }
+
+  const nom = entree.nom.trim().replace(/\s+/g, ' ');
+  const metier = entree.metier?.trim().replace(/\s+/g, ' ') ?? '';
+  const demande = entree.demande?.trim().replace(/\s+/g, ' ') ?? '';
   if (!nom) throw new ErreurRequete(400, 'Le nom du client est obligatoire.');
+  if (nom.length > 80) throw new ErreurRequete(400, 'Le nom dépasse 80 caractères.');
+  if (metier.length > 140) throw new ErreurRequete(400, "L'activité dépasse 140 caractères.");
+  if (demande.length > 600) throw new ErreurRequete(400, 'La demande dépasse 600 caractères.');
 
   const id = randomUUID();
   const token = nouveauJeton();
@@ -249,8 +326,8 @@ export function creer(db: Base, entree: CreationCadrage, provenance?: Provenance
     id,
     token,
     nom,
-    entree.metier?.trim() ?? '',
-    entree.demande?.trim() ?? '',
+    metier,
+    demande,
     provenance?.courriel ?? '',
     provenance?.ipEmpreinte ?? '',
     provenance?.dejaEntre ? now : null,
@@ -285,7 +362,17 @@ const CHAMPS_PATCH = {
   lien2: 'lien2',
 } as const;
 
+const LIMITES_TEXTE: Partial<Record<keyof PatchSession, number>> = {
+  draft: 20_000,
+  brief: 120_000,
+  lien1: 2_000,
+  lien2: 2_000,
+};
+
 function valider(patch: PatchSession): void {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    throw new ErreurRequete(400, 'Modification de session invalide.');
+  }
   if (patch.mode !== undefined && patch.mode !== 'long' && patch.mode !== 'court') {
     throw new ErreurRequete(400, 'mode inconnu');
   }
@@ -301,6 +388,32 @@ function valider(patch: PatchSession): void {
   if (patch.rang !== undefined && (!Number.isSafeInteger(patch.rang) || patch.rang < 0)) {
     throw new ErreurRequete(400, 'rang doit être un entier positif');
   }
+  for (const [champ, maximum] of Object.entries(LIMITES_TEXTE)) {
+    const valeur = patch[champ as keyof PatchSession];
+    if (valeur !== undefined && typeof valeur !== 'string') {
+      throw new ErreurRequete(400, `${champ} doit être du texte`);
+    }
+    if (typeof valeur === 'string' && valeur.length > maximum) {
+      throw new ErreurRequete(413, `${champ} dépasse ${maximum} caractères`);
+    }
+  }
+  for (const champ of ['lien1', 'lien2'] as const) {
+    const valeur = patch[champ]?.trim();
+    if (!valeur) continue;
+    try {
+      const url = new URL(valeur);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+    } catch {
+      throw new ErreurRequete(400, `${champ} doit être une adresse HTTP ou HTTPS valide.`);
+    }
+  }
+}
+
+/** Toute modification de fond après validation doit être relue et validée à nouveau. */
+function invaliderValidation(db: Base, cadrageId: string): void {
+  db.prepare(
+    "UPDATE cadrage SET statut = 'en_cours', valide_le = NULL WHERE id = ? AND statut = 'valide'",
+  ).run(cadrageId);
 }
 
 /**
@@ -309,6 +422,10 @@ function valider(patch: PatchSession): void {
  * de bord doit refléter le temps passé à répondre, pas l'onglet resté ouvert.
  */
 export function appliquerPatch(db: Base, ligne: LigneBase, patch: PatchSession): LigneBase {
+  return dansTransaction(db, () => appliquerPatchInterne(db, ligne, patch));
+}
+
+function appliquerPatchInterne(db: Base, ligne: LigneBase, patch: PatchSession): LigneBase {
   valider(patch);
 
   const colonnes: string[] = [];
@@ -328,42 +445,71 @@ export function appliquerPatch(db: Base, ligne: LigneBase, patch: PatchSession):
   valeurs.push(now, duree, ligne.id);
 
   db.prepare(`UPDATE cadrage SET ${colonnes.join(', ')} WHERE id = ?`).run(...valeurs);
+  const modifieLeFond = (['mode', 'maturite', 'voie', 'brief', 'lien1', 'lien2'] as const).some(
+    (champ) => patch[champ] !== undefined && patch[champ] !== ligne[CHAMPS_PATCH[champ]],
+  );
+  if (modifieLeFond) invaliderValidation(db, ligne.id);
   return parId(db, ligne.id)!;
 }
 
-export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree: PutReponse): Reponse {
+export function ecrireReponse(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  entree: PutReponse,
+  source: SourceReponse = 'client',
+): Reponse {
+  return dansTransaction(db, () => ecrireReponseInterne(db, ligne, point, entree, source));
+}
+
+function ecrireReponseInterne(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  entree: PutReponse,
+  source: SourceReponse,
+): Reponse {
   if (!Number.isInteger(point) || point < 0 || point >= POINTS.length) {
     throw new ErreurRequete(404, 'point inconnu');
   }
   if (typeof entree.texte !== 'string' || !entree.texte.trim()) {
     throw new ErreurRequete(400, 'La réponse ne peut pas être vide.');
   }
+  if (entree.texte.length > 20_000) {
+    throw new ErreurRequete(413, 'La réponse dépasse 20 000 caractères.');
+  }
 
   const precedente = db
-    .prepare('SELECT texte FROM reponse WHERE cadrage_id = ? AND point = ?')
-    .get(ligne.id, point) as { texte: string } | undefined;
-  const texteChange = precedente !== undefined && precedente.texte !== entree.texte;
+    .prepare('SELECT texte, source FROM reponse WHERE cadrage_id = ? AND point = ?')
+    .get(ligne.id, point) as { texte: string; source: string } | undefined;
+  const texteChange =
+    precedente === undefined || precedente.texte !== entree.texte || precedente.source !== source;
   const now = maintenant();
   // Une reformulation et un arbitrage ne restent acquis que si le texte est
   // identique. `clos` reflète toujours l'écriture courante : réécrire une
   // ancienne réponse sans `clore` rouvre le point.
   db.prepare(
-    `INSERT INTO reponse (cadrage_id, point, texte, confirme, arbitre, clos, maj_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO reponse (cadrage_id, point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
      ON CONFLICT (cadrage_id, point) DO UPDATE SET
        texte    = excluded.texte,
-       confirme = CASE WHEN reponse.texte = excluded.texte
+       source   = excluded.source,
+       confirme = CASE WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
                        THEN MAX(reponse.confirme, excluded.confirme)
                        ELSE excluded.confirme END,
-       arbitre  = CASE WHEN reponse.texte = excluded.texte
+       arbitre  = CASE WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
                        THEN MAX(reponse.arbitre, excluded.arbitre)
                        ELSE excluded.arbitre END,
+       deduction_confirmee = CASE WHEN reponse.texte = excluded.texte AND reponse.source = excluded.source
+                                  THEN reponse.deduction_confirmee
+                                  ELSE 0 END,
        clos     = excluded.clos,
        maj_le   = excluded.maj_le`,
   ).run(
     ligne.id,
     point,
     entree.texte,
+    source,
     entree.confirme ? 1 : 0,
     entree.arbitre ? 1 : 0,
     entree.clore ? 1 : 0,
@@ -376,7 +522,7 @@ export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree:
   if (texteChange) {
     db.prepare(
       `DELETE FROM generation
-       WHERE cadrage_id = ? AND point = ? AND genre IN ('reformulation', 'deduction')`,
+       WHERE cadrage_id = ? AND point = ? AND genre IN ('reformulation', 'deduction', 'tension')`,
     ).run(ligne.id, point);
     if (point === INDEX_PERIMETRE) {
       db.prepare(
@@ -387,17 +533,20 @@ export function ecrireReponse(db: Base, ligne: LigneBase, point: number, entree:
   }
 
   db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, ligne.id);
+  if (texteChange) invaliderValidation(db, ligne.id);
 
   const r = db
     .prepare(
-      'SELECT point, texte, confirme, arbitre, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
+      'SELECT point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
     )
     .get(ligne.id, point) as unknown as LigneReponse;
 
   return {
     texte: r.texte,
+    source: r.source === 'document' ? 'document' : 'client',
     confirme: r.confirme === 1,
     arbitre: r.arbitre === 1,
+    deductionConfirmee: r.deduction_confirmee === 1,
     clos: r.clos === 1,
     majLe: r.maj_le,
   };
@@ -412,31 +561,55 @@ export function marquerReponse(
   db: Base,
   ligne: LigneBase,
   point: number,
-  drapeaux: { confirme?: boolean; arbitre?: boolean },
+  drapeaux: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean },
 ): Reponse {
+  return dansTransaction(db, () => marquerReponseInterne(db, ligne, point, drapeaux));
+}
+
+function marquerReponseInterne(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  drapeaux: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean },
+): Reponse {
+  for (const [nom, valeur] of Object.entries(drapeaux)) {
+    if (valeur !== undefined && typeof valeur !== 'boolean') {
+      throw new ErreurRequete(400, `${nom} doit être un booléen.`);
+    }
+  }
   const now = maintenant();
   // Monotone, comme à l'écriture : un accord ne se retire pas tout seul, il ne
   // retombe qu'avec une réécriture du texte.
   const res = db
     .prepare(
-      `UPDATE reponse SET confirme = MAX(confirme, ?), arbitre = MAX(arbitre, ?), maj_le = ?
+      `UPDATE reponse SET confirme = MAX(confirme, ?), arbitre = MAX(arbitre, ?),
+                           deduction_confirmee = MAX(deduction_confirmee, ?), maj_le = ?
        WHERE cadrage_id = ? AND point = ?`,
     )
-    .run(drapeaux.confirme ? 1 : 0, drapeaux.arbitre ? 1 : 0, now, ligne.id, point);
+    .run(
+      drapeaux.confirme ? 1 : 0,
+      drapeaux.arbitre ? 1 : 0,
+      drapeaux.deductionConfirmee ? 1 : 0,
+      now,
+      ligne.id,
+      point,
+    );
 
   if (res.changes === 0) throw new ErreurRequete(404, "Ce point n'a pas encore de réponse.");
   db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, ligne.id);
 
   const r = db
     .prepare(
-      'SELECT point, texte, confirme, arbitre, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
+      'SELECT point, texte, source, confirme, arbitre, deduction_confirmee, clos, maj_le FROM reponse WHERE cadrage_id = ? AND point = ?',
     )
     .get(ligne.id, point) as unknown as LigneReponse;
 
   return {
     texte: r.texte,
+    source: r.source === 'document' ? 'document' : 'client',
     confirme: r.confirme === 1,
     arbitre: r.arbitre === 1,
+    deductionConfirmee: r.deduction_confirmee === 1,
     clos: r.clos === 1,
     majLe: r.maj_le,
   };
@@ -449,6 +622,19 @@ export function marquerReponse(
  * `reponse.texte` sans rien savoir du fil.
  */
 export function ecrireEchange(
+  db: Base,
+  ligne: LigneBase,
+  point: number,
+  rang: number,
+  question: string,
+  entree: PutReponse,
+): Reponse {
+  return dansTransaction(db, () =>
+    ecrireEchangeInterne(db, ligne, point, rang, question, entree),
+  );
+}
+
+function ecrireEchangeInterne(
   db: Base,
   ligne: LigneBase,
   point: number,
@@ -515,6 +701,52 @@ export function poserQuestion(
 }
 
 export function validerDossier(db: Base, ligne: LigneBase): LigneBase {
+  const reponses = reponsesDe(db, ligne.id);
+  const parPoint = new Map(reponses.map((reponse) => [reponse.point, reponse]));
+  const decision = decisionHorsPerimetre(db, ligne.id);
+  const visibles = POINTS.map((_, index) => index).filter(
+    (index) =>
+      index !== INDEX_HORS_PERIMETRE ||
+      decision?.afficher === true ||
+      (decision === null && parPoint.has(INDEX_HORS_PERIMETRE)),
+  );
+  const incomplets = visibles.filter((point) => {
+    const reponse = parPoint.get(point);
+    return !reponse?.texte.trim() || reponse.clos !== 1;
+  });
+  if (incomplets.length) {
+    throw new ErreurRequete(
+      409,
+      `Le dossier est incomplet : ${incomplets
+        .map((point) => `${POINTS[point].num} — ${POINTS[point].label}`)
+        .join(', ')}.`,
+    );
+  }
+
+  const tensionsParPoint = tensions(db, ligne.id);
+  const tensionNonTranchee = visibles.find(
+    (point) => tensionsParPoint[String(point)] && parPoint.get(point)?.arbitre !== 1,
+  );
+  if (tensionNonTranchee !== undefined) {
+    throw new ErreurRequete(
+      409,
+      `Une contradiction reste à trancher au point ${POINTS[tensionNonTranchee].num}.`,
+    );
+  }
+
+  if (ligne.mode === 'long') {
+    const reformulations = generations(db, ligne.id, 'reformulation');
+    const nonConfirmee = visibles.find(
+      (point) => reformulations[String(point)] && parPoint.get(point)?.confirme !== 1,
+    );
+    if (nonConfirmee !== undefined) {
+      throw new ErreurRequete(
+        409,
+        `La reformulation du point ${POINTS[nonConfirmee].num} doit être confirmée.`,
+      );
+    }
+  }
+
   const now = maintenant();
   db.prepare('UPDATE cadrage SET statut = ?, valide_le = ?, maj_le = ? WHERE id = ?').run(
     'valide',
@@ -530,6 +762,14 @@ export function ajouterFichier(
   cadrageId: string,
   entree: { nom: string; taille: number; typeMime: string; chemin: string },
 ): Fichier {
+  return dansTransaction(db, () => ajouterFichierInterne(db, cadrageId, entree));
+}
+
+function ajouterFichierInterne(
+  db: Base,
+  cadrageId: string,
+  entree: { nom: string; taille: number; typeMime: string; chemin: string },
+): Fichier {
   const id = randomUUID();
   const now = maintenant();
   db.prepare(
@@ -537,13 +777,17 @@ export function ajouterFichier(
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, cadrageId, entree.nom, entree.taille, entree.typeMime, entree.chemin, now);
   db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(now, cadrageId);
+  invaliderValidation(db, cadrageId);
 
   return { id, nom: entree.nom, taille: entree.taille, typeMime: entree.typeMime, deposeLe: now };
 }
 
 export function supprimerFichier(db: Base, cadrageId: string, fichierId: string): void {
-  db.prepare('DELETE FROM fichier WHERE cadrage_id = ? AND id = ?').run(cadrageId, fichierId);
-  db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(maintenant(), cadrageId);
+  dansTransaction(db, () => {
+    db.prepare('DELETE FROM fichier WHERE cadrage_id = ? AND id = ?').run(cadrageId, fichierId);
+    db.prepare('UPDATE cadrage SET maj_le = ? WHERE id = ?').run(maintenant(), cadrageId);
+    invaliderValidation(db, cadrageId);
+  });
 }
 
 export function supprimerCadrage(db: Base, id: string): void {
@@ -556,8 +800,10 @@ export function supprimerCadrage(db: Base, id: string): void {
  * Une tension est ouverte quand la réponse retenue est celle qui contredit un
  * point déjà noté, et que le client n'a pas encore tranché.
  */
-function tensionOuverte(reponses: LigneReponse[]): boolean {
+function tensionOuverte(db: Base, cadrageId: string, reponses: LigneReponse[]): boolean {
+  const generees = tensions(db, cadrageId);
   return reponses.some((r) => {
+    if (generees[String(r.point)] && r.arbitre === 0) return true;
     const point = POINTS[r.point];
     if (point?.tensionOn === undefined) return false;
     return (
@@ -597,7 +843,12 @@ export function lister(db: Base): { stats: StatsCadrages; cadrages: LigneCadrage
     return {
       id: ligne.id,
       token: ligne.token,
-      client: { nom: ligne.client_nom, metier: ligne.client_metier, demande: ligne.demande },
+      client: {
+        nom: ligne.client_nom,
+        metier: ligne.client_metier,
+        demande: ligne.demande,
+        courriel: ligne.courriel || undefined,
+      },
       voie: ligne.voie as Voie,
       mode: ligne.mode as Mode,
       statut: ligne.statut as Statut,
@@ -607,8 +858,11 @@ export function lister(db: Base): { stats: StatsCadrages; cadrages: LigneCadrage
         repondus.size -
         (horsPerimetreIgnore && repondus.has(INDEX_HORS_PERIMETRE) ? 1 : 0) +
         (horsPerimetreIgnore ? 1 : 0),
+      pointsCouverts: POINTS.map((_, index) => index).filter(
+        (index) => repondus.has(index) || (index === INDEX_HORS_PERIMETRE && horsPerimetreIgnore),
+      ),
       enCours: ligne.statut === 'valide' ? null : enCours,
-      tensionOuverte: tensionOuverte(reponses),
+      tensionOuverte: tensionOuverte(db, ligne.id, reponses),
       maturite: ligne.maturite as Maturite | '',
       dureeMs: ligne.duree_ms,
       majLe: ligne.maj_le,

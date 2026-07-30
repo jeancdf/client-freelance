@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Une seule image : Fastify sert l'API et le build Vite. Le serveur lit les
-# fichiers TypeScript directement — Node ≥ 22.18 efface les types au
-# chargement, donc pas d'étape de compilation côté serveur.
+# fichiers TypeScript directement — Node ≥ 22.23 efface les types et fournit
+# la sauvegarde SQLite utilisée au démarrage, donc pas de compilation serveur.
 
 # --- Étape 1 : build du front -------------------------------------------- #
 FROM node:22-alpine AS build
@@ -35,7 +35,7 @@ COPY server ./server
 
 # Créé avant le montage : Docker reprend ce propriétaire quand il initialise
 # le volume nommé, sinon le conteneur non-root ne pourrait pas y écrire.
-RUN mkdir -p /data && chown -R node:node /data
+RUN mkdir -p /data /backups && chown -R node:node /data /backups
 
 USER node
 

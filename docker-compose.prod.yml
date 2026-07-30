@@ -30,12 +30,14 @@ services:
       # moins ajusté au métier du client, mais jamais interrompu.
       CADRAGE_OPENROUTER_KEY: ${CADRAGE_OPENROUTER_KEY:-}
       CADRAGE_MODELE: ${CADRAGE_MODELE:-qwen/qwen3.7-plus}
+      CADRAGE_BACKUP_DIR: /backups
       HOST: 0.0.0.0
       PORT: '8787'
 
     volumes:
       # La base SQLite et les fichiers déposés survivent aux déploiements.
       - data:/data
+      - backups:/backups
 
     expose:
       - '8787'
@@ -55,6 +57,8 @@ services:
 volumes:
   data:
     name: client-freelance_data
+  backups:
+    name: client-freelance_backups
 
 networks:
   # Réseau du proxy Caddy central, créé par la stack `qr-code`. Il doit exister

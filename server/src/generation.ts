@@ -44,6 +44,7 @@ const empreinte = (entree: string) => createHash('sha256').update(entree).digest
 
 /** Invalide les anciens textes quand leur règle de rédaction évolue. */
 const VERSION_PROMPTS_NEUTRES = 'contrats-sections-atomiques-v5';
+const VERSION_ANALYSE = 'analyse-verifiee-v1';
 
 interface LigneCadrage {
   id: string;
@@ -63,7 +64,9 @@ export function contexteDe(db: Base, ligne: LigneCadrage): Contexte {
   for (const r of lignes) reponses[r.point] = r.texte;
 
   return {
-    nom: ligne.client_nom,
+    // Le prénom n'est pas utile à la génération : ne pas l'envoyer réduit les
+    // données directement identifiantes confiées au fournisseur du modèle.
+    nom: '',
     metier: ligne.client_metier,
     demande: ligne.demande,
     reponses,
@@ -94,6 +97,18 @@ function ecrire(db: Base, cadrageId: string, point: number, genre: string, cle: 
      ON CONFLICT (cadrage_id, point, genre) DO UPDATE SET
        cle = excluded.cle, contenu = excluded.contenu, cree_le = excluded.cree_le`,
   ).run(cadrageId, point, genre, cle, JSON.stringify(valeur), maintenant());
+}
+
+function empreinteContexte(contexte: Contexte, texteSupplementaire = ''): string {
+  return empreinte(
+    JSON.stringify({
+      demande: contexte.demande,
+      brief: contexte.brief ?? '',
+      maturite: contexte.maturite ?? '',
+      reponses: contexte.reponses,
+      texteSupplementaire,
+    }),
+  );
 }
 
 function decisionHorsPerimetreStockee(
@@ -725,7 +740,7 @@ export function tension(db: Base, ligne: LigneCadrage, index: number, reponse: s
     ligne.id,
     index,
     'tension',
-    empreinte(reponse),
+    empreinteContexte(contexte, reponse),
     async () => {
       const { valeur } = await llm.generer<{
         tension: boolean;
@@ -760,7 +775,7 @@ export function deduction(db: Base, ligne: LigneCadrage, index: number, reponse:
     ligne.id,
     index,
     'deduction',
-    empreinte(reponse),
+    empreinteContexte(contexte, reponse),
     async () => {
       const { valeur } = await llm.generer<{ deduction: boolean; texte: string }>(
         promptDeduction(contexte, point, reponse),
@@ -792,15 +807,99 @@ const SCHEMA_ANALYSE = llm.objet({
   ),
 });
 
-export function analyse(db: Base, ligne: LigneCadrage, texteDocuments: string) {
+function repliAnalyse(): Analyse {
+  return {
+    points: POINTS.map((point, index) => {
+      if (index === INDEX_HORS_PERIMETRE) {
+        return { index, couvert: true, extrait: '', reponse: '', manque: '' };
+      }
+      return {
+        index,
+        couvert: false,
+        extrait: '',
+        reponse: '',
+        manque: `Le point « ${point.label} » reste à renseigner dans l’entretien.`,
+      };
+    }),
+    couverts: 0,
+  };
+}
+
+function normaliserAnalyse(pointsBruts: PointAnalyse[], texteDocuments: string): Analyse {
+  if (!Array.isArray(pointsBruts) || pointsBruts.length !== POINTS.length) {
+    throw new llm.ErreurLlm(`L’analyse doit contenir exactement ${POINTS.length} points.`);
+  }
+
+  const parIndex = new Map<number, PointAnalyse>();
+  const source = texteDocuments.replace(/\s+/g, ' ').trim();
+  for (const brut of pointsBruts) {
+    if (
+      !Number.isInteger(brut?.index) ||
+      !POINTS[brut.index] ||
+      parIndex.has(brut.index) ||
+      typeof brut.couvert !== 'boolean' ||
+      typeof brut.extrait !== 'string' ||
+      typeof brut.reponse !== 'string' ||
+      typeof brut.manque !== 'string'
+    ) {
+      throw new llm.ErreurLlm('L’analyse contient un point absent, dupliqué ou mal formé.');
+    }
+
+    const point = {
+      index: brut.index,
+      couvert: brut.couvert,
+      extrait: brut.extrait.trim(),
+      reponse: brut.reponse.trim(),
+      manque: brut.manque.trim(),
+    };
+    const nonApplicable =
+      point.index === INDEX_HORS_PERIMETRE &&
+      point.couvert &&
+      !point.extrait &&
+      !point.reponse &&
+      !point.manque;
+
+    if (point.couvert && !nonApplicable) {
+      const extraitNormalise = point.extrait.replace(/\s+/g, ' ');
+      if (
+        !point.extrait ||
+        point.extrait.length > 150 ||
+        !source.includes(extraitNormalise) ||
+        !point.reponse
+      ) {
+        throw new llm.ErreurLlm(
+          `Le point ${point.index} prétend être couvert sans extrait vérifiable.`,
+        );
+      }
+      point.manque = '';
+    } else if (!point.couvert) {
+      if (point.extrait || point.reponse || !point.manque) {
+        throw new llm.ErreurLlm(`Le point ${point.index} non couvert est incohérent.`);
+      }
+    }
+    parIndex.set(point.index, point);
+  }
+
+  const points = POINTS.map((_, index) => parIndex.get(index)!);
+  return {
+    points,
+    couverts: points.filter(
+      (point) =>
+        point.couvert &&
+        (point.index !== INDEX_HORS_PERIMETRE || Boolean(point.extrait || point.reponse)),
+    ).length,
+  };
+}
+
+export async function analyse(db: Base, ligne: LigneCadrage, texteDocuments: string) {
   const contexte = { ...contexteDe(db, ligne), brief: texteDocuments };
 
-  return obtenir<Analyse>(
+  const resultat = await obtenir<Analyse>(
     db,
     ligne.id,
     -1,
     'analyse',
-    empreinte(texteDocuments),
+    empreinte(`${VERSION_ANALYSE}|${empreinteContexte(contexte, texteDocuments)}`),
     async () => {
       const { valeur } = await llm.generer<{ points: PointAnalyse[] }>(
         promptAnalyse(contexte),
@@ -808,9 +907,19 @@ export function analyse(db: Base, ligne: LigneCadrage, texteDocuments: string) {
         SCHEMA_ANALYSE,
         { temperature: 0.2, maxTokens: 4000 },
       );
-      const points = valeur.points.filter((p) => POINTS[p.index] !== undefined);
-      return { points, couverts: points.filter((p) => p.couvert).length };
+      return normaliserAnalyse(valeur.points, texteDocuments);
     },
-    () => ({ points: [], couverts: 0 }),
+    repliAnalyse,
   );
+
+  if (resultat.origine === 'repli') return resultat;
+  try {
+    return { ...resultat, valeur: normaliserAnalyse(resultat.valeur.points, texteDocuments) };
+  } catch (cause) {
+    db.prepare(
+      "DELETE FROM generation WHERE cadrage_id = ? AND point = -1 AND genre = 'analyse'",
+    ).run(ligne.id);
+    console.warn(`[generation] analyse en cache invalide : ${(cause as Error).message}`);
+    return { valeur: repliAnalyse(), origine: 'repli' as const };
+  }
 }

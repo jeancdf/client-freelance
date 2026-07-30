@@ -100,25 +100,28 @@ export function Rapide() {
 
   const [analyse, setAnalyse] = useState<AnalyseGeneree | null>(null);
   const [lecture, setLecture] = useState<'repos' | 'encours' | 'erreur'>('repos');
+  const [continuation, setContinuation] = useState(false);
   /** Des documents sont arrivés depuis la dernière lecture. */
   const [aRelire, setARelire] = useState(false);
 
   const brief = state.brief;
 
-  const lire = useCallback(async (): Promise<void> => {
-    if (!session) return;
+  const lire = useCallback(async (): Promise<boolean> => {
+    if (!session) return false;
     setLecture('encours');
     setARelire(false);
     try {
       // L'enregistrement de fond est différé d'une demi-seconde : sans cette
       // écriture, le serveur analyserait le texte d'avant, ou rien du tout.
-      await api.patcher(session.token, { brief });
+      await api.patcher(session.token, { brief, voie: 'rapide' });
       const resultat = await api.analyser(session.token);
       setAnalyse(resultat);
       dispatch({ type: 'horsPerimetre', decision: resultat.horsPerimetre });
       setLecture('repos');
+      return true;
     } catch {
       setLecture('erreur');
+      return false;
     }
   }, [session, brief, dispatch]);
 
@@ -187,9 +190,45 @@ export function Rapide() {
     if (!session) return;
     try {
       await api.retirerFichier(session.token, id);
-      dispatch({ type: 'fichiers', fichiers: fichiers.filter((f) => f.id !== id) });
+      const restants = fichiers.filter((f) => f.id !== id);
+      dispatch({ type: 'fichiers', fichiers: restants });
+      setAnalyse(null);
+      setARelire(false);
+      if (restants.length || brief.trim()) await lire();
+      else setLecture('repos');
     } catch (cause) {
       setErreur(cause instanceof Error ? cause.message : 'Le retrait a échoué.');
+    }
+  }
+
+  async function continuer(): Promise<void> {
+    if (!session) {
+      dispatch({ type: 'completeRapide' });
+      return;
+    }
+
+    setContinuation(true);
+    setErreur(null);
+    try {
+      if (aRelire) {
+        if (await lire()) {
+          setErreur("La lecture a été actualisée. Relisez-la avant d'utiliser les synthèses.");
+        }
+        return;
+      }
+      if (analyse && analyse.origine !== 'repli') {
+        await api.appliquerAnalyse(session.token);
+        dispatch({
+          type: 'hydrate',
+          token: session.token,
+          session: await api.lireSession(session.token),
+        });
+      }
+      dispatch({ type: 'completeRapide' });
+    } catch (cause) {
+      setErreur(cause instanceof Error ? cause.message : "Impossible d'appliquer l'analyse.");
+    } finally {
+      setContinuation(false);
     }
   }
 
@@ -212,6 +251,12 @@ export function Rapide() {
             Document, notes brutes, capture d'un tableau, liens vers l'existant : tout est utile,
             même incomplet. Rien de ce que vous écrivez ne sera reformulé sans votre accord.
           </p>
+          {session && (
+            <p className="rapide__drop-note">
+              Le texte lisible des documents peut être transmis au service d’IA configuré par
+              Studio Cazals pour cette analyse.
+            </p>
+          )}
         </div>
 
         <div className="rapide__grid">
@@ -223,9 +268,13 @@ export function Rapide() {
               <textarea
                 id="brief"
                 rows={9}
+                maxLength={120_000}
                 className="rapide__brief-input"
                 value={state.brief}
-                onChange={(e) => dispatch({ type: 'setBrief', value: e.target.value })}
+                onChange={(e) => {
+                  dispatch({ type: 'setBrief', value: e.target.value });
+                  if (analyse) setARelire(true);
+                }}
                 // À la sortie du champ, pas à chaque frappe : lire à chaque
                 // touche enfoncée lancerait une analyse sur trois mots.
                 onBlur={() => {
@@ -285,6 +334,7 @@ export function Rapide() {
                   ref={champFichier}
                   type="file"
                   multiple
+                  accept=".txt,.md,.csv,.json,.xml,.pdf,.docx,.png,.jpg,.jpeg,.webp,.xls,.xlsx,.ods"
                   className="rapide__drop-input"
                   onChange={(e) => {
                     void deposer(e.target.files);
@@ -300,7 +350,7 @@ export function Rapide() {
                   Parcourir
                 </button>
                 <p className="rapide__drop-note">
-                  PDF, Word, images, tableurs · 25 Mo par fichier
+                  PDF, Word (.docx) et texte lus · images et tableurs conservés · 25 Mo par fichier
                 </p>
               </div>
 
@@ -319,6 +369,7 @@ export function Rapide() {
                   className="rapide__link"
                   aria-label="Premier lien vers l'existant"
                   placeholder="https://"
+                  maxLength={2_000}
                   value={state.lien1}
                   onChange={(e) => dispatch({ type: 'setLien1', value: e.target.value })}
                 />
@@ -327,10 +378,14 @@ export function Rapide() {
                   className="rapide__link"
                   aria-label="Second lien vers l'existant"
                   placeholder="https://"
+                  maxLength={2_000}
                   value={state.lien2}
                   onChange={(e) => dispatch({ type: 'setLien2', value: e.target.value })}
                 />
               </div>
+              <p className="rapide__drop-note">
+                Ces liens sont conservés pour le prestataire ; leur contenu n'est pas aspiré.
+              </p>
             </section>
           </div>
 
@@ -381,9 +436,16 @@ export function Rapide() {
                     label: `${POINTS[p.index].num} — ${POINTS[p.index].label}`,
                     text: p.manque,
                   }))}
-                  couverts={couverts.map((p) => `${POINTS[p.index].label} — « ${p.extrait} »`)}
+                  couverts={couverts.map((p) => `${POINTS[p.index].label} — ${p.reponse}`)}
                   resume={`Les ${couverts.length} points déjà couverts`}
                 />
+
+                {analyse.origine === 'repli' && (
+                  <p className="rapide__illisible">
+                    L'analyse automatique est indisponible. Aucun point ne sera considéré comme
+                    couvert par défaut : le questionnaire complet reste accessible.
+                  </p>
+                )}
 
                 {/* L'extraction PDF et Word manque : le dire plutôt que de
                     laisser croire que tout a été lu. */}
@@ -409,16 +471,22 @@ export function Rapide() {
             <button
               type="button"
               className="btn btn--primary rapide__submit"
-              onClick={() => dispatch({ type: 'completeRapide' })}
-              disabled={lecture === 'encours'}
+              onClick={() => void continuer()}
+              disabled={lecture === 'encours' || continuation}
             >
-              {!session
+              {continuation
+                ? 'Préparation du questionnaire…'
+                : aRelire
+                  ? 'Relire avant de continuer'
+                : !session
                 ? 'Compléter les trois points'
-                : analyse
+                : analyse && analyse.origine !== 'repli'
                   ? manques.length === 0
-                    ? 'Relire mon dossier'
-                    : `Compléter ${manques.length === 1 ? 'le point manquant' : `les ${manques.length} points manquants`}`
-                  : 'Passer aux questions'}
+                    ? 'Utiliser ces synthèses et relire mon dossier'
+                    : `Utiliser ces synthèses et compléter ${
+                        manques.length === 1 ? 'le point manquant' : `les ${manques.length} points manquants`
+                      }`
+                  : 'Continuer avec le questionnaire complet'}
             </button>
             <p className="rapide__submit-note">Seulement ce qui manque</p>
           </aside>

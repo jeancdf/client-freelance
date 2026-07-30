@@ -15,6 +15,20 @@ export function Recap() {
   const session = state.session;
   const pointsVisibles = indicesPointsVisibles(state);
   const [envoi, setEnvoi] = useState<'repos' | 'envoi' | 'erreur'>('repos');
+  const [messageErreur, setMessageErreur] = useState('');
+  const pointsIncomplets = pointsVisibles.filter(
+    (point) => state.answers[point] === undefined || !state.clos[point],
+  );
+  const tensionEnAttente = pointsVisibles.some(
+    (point) => state.tensions[point] && !state.tensionResolved[point],
+  );
+  const reformulationEnAttente =
+    state.mode === 'long' &&
+    pointsVisibles.some(
+      (point) => state.reformulations[point] && !state.confirmed[point],
+    );
+  const pretAValider =
+    pointsIncomplets.length === 0 && !tensionEnAttente && !reformulationEnAttente;
 
   const enTete = session
     ? `Cadrage — ${session.client.nom} · ${dateLongue(session.majLe)} · ${minutes(session.dureeMs)} minutes`
@@ -26,12 +40,40 @@ export function Recap() {
       return;
     }
     setEnvoi('envoi');
+    setMessageErreur('');
     try {
+      // La validation ne doit pas dépasser l'autosauvegarde de 500 ms : on
+      // pousse explicitement le dernier état et les accords avant de fermer.
+      await api.patcher(session.token, {
+        mode: state.mode,
+        voie: state.voie,
+        step: state.step,
+        rang: state.rang,
+        draft: state.draft,
+        brief: state.brief,
+        lien1: state.lien1,
+        lien2: state.lien2,
+      });
+      for (const point of pointsVisibles) {
+        if (
+          !state.confirmed[point] &&
+          !state.tensionResolved[point] &&
+          !state.deductionsConfirmed[point]
+        ) {
+          continue;
+        }
+        await api.marquerReponse(session.token, point, {
+          confirme: Boolean(state.confirmed[point]),
+          arbitre: Boolean(state.tensionResolved[point]),
+          deductionConfirmee: Boolean(state.deductionsConfirmed[point]),
+        });
+      }
       const resultat = await api.validerDossier(session.token);
       dispatch({ type: 'dossierValide', valideLe: resultat.valideLe, dureeMs: resultat.dureeMs });
       dispatch({ type: 'goScreen', screen: 'fin' });
-    } catch {
+    } catch (cause) {
       setEnvoi('erreur');
+      setMessageErreur(cause instanceof Error ? cause.message : "La validation n'a pas abouti.");
     }
   }
 
@@ -44,8 +86,8 @@ export function Recap() {
           <p className="lbl recap__kicker">{enTete}</p>
           <h1 className="serif recap__title">Voilà votre projet, tel que je l'ai compris.</h1>
           <p className="recap__lead">
-            Relisez, corrigez ce qui vous semble faux, puis validez. Ce document part chez Nicolas
-            Cazals et sert de base au chiffrage.
+            Relisez, corrigez ce qui vous semble faux, puis validez. Le dossier devient alors
+            visible dans le tableau de Nicolas Cazals et sert de base au chiffrage.
           </p>
         </div>
 
@@ -80,7 +122,9 @@ export function Recap() {
           // Ce que le modèle a écrit sur SA réponse, sinon les textes de la
           // maquette. Le dossier livré ne peut pas citer un autre client.
           const deduit = session ? state.deductions[k] : point.deduit;
+          const deductionConfirmee = Boolean(state.deductionsConfirmed[k]);
           const reformulation = session ? state.reformulations[k] : point.reform;
+          const sourceDocument = session && state.sources[k] === 'document';
 
           return (
             <section key={point.num} className="recap__section">
@@ -89,7 +133,14 @@ export function Recap() {
               </h2>
               <div className="recap__blocks">
                 {afficher ? (
-                  <p className="recap__quote">« {answerOf(state, k)} »</p>
+                  sourceDocument ? (
+                    <div>
+                      <p className="lbl recap__sub-label">Synthèse du document · acceptée</p>
+                      <p className="recap__reform">{answerOf(state, k)}</p>
+                    </div>
+                  ) : (
+                    <p className="recap__quote">« {answerOf(state, k)} »</p>
+                  )
                 ) : (
                   <p className="recap__manquant">
                     Pas encore renseigné — ce point partira vide si vous validez maintenant.
@@ -108,8 +159,13 @@ export function Recap() {
                     <p className="lbl recap__sub-label">Déduit — vous ne me l'avez pas dit</p>
                     <p className="recap__deduit-text">{deduit}</p>
                     <div className="recap__deduit-actions">
-                      <button type="button" className="btn btn--soft recap__deduit-btn">
-                        C'est juste
+                      <button
+                        type="button"
+                        className="btn btn--soft recap__deduit-btn"
+                        disabled={deductionConfirmee}
+                        onClick={() => dispatch({ type: 'confirmDeduction', point: k })}
+                      >
+                        {deductionConfirmee ? 'Hypothèse confirmée' : "C'est juste"}
                       </button>
                       <button
                         type="button"
@@ -151,18 +207,23 @@ export function Recap() {
               type="button"
               className="btn btn--primary recap__validate"
               onClick={() => void valider()}
-              disabled={envoi === 'envoi'}
+              disabled={envoi === 'envoi' || !pretAValider}
             >
-              {envoi === 'envoi' ? 'Envoi en cours…' : 'Valider et envoyer à Nicolas Cazals'}
+              {envoi === 'envoi'
+                ? 'Validation en cours…'
+                : pretAValider
+                  ? 'Valider mon dossier'
+                  : 'Terminer les points avant de valider'}
             </button>
           </div>
           {envoi === 'erreur' && (
             <p className="recap__erreur" role="alert">
-              L'envoi n'a pas abouti. Vos réponses sont enregistrées — réessayez dans un instant.
+              {messageErreur} Vos réponses restent enregistrées.
             </p>
           )}
           <p className="recap__foot-note">
-            Vous recevrez une copie de ce document par courriel · modifiable jusqu'au rendez-vous
+            Après validation, Nicolas retrouve ce dossier dans son tableau de suivi. Toute
+            modification demandera une nouvelle validation.
           </p>
         </div>
       </main>

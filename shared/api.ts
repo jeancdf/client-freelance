@@ -34,13 +34,20 @@ export interface Echange {
   reponse: string;
 }
 
+/** Origine vérifiable du texte retenu dans le dossier. */
+export type SourceReponse = 'client' | 'document';
+
 export interface Reponse {
-  /** Les mots du client, jamais retouchés. */
+  /** Les mots du client, ou une synthèse explicitement acceptée de son document. */
   texte: string;
+  /** Permet au récapitulatif de ne jamais présenter une synthèse comme une citation. */
+  source: SourceReponse;
   /** La reformulation a été relue et acceptée. */
   confirme: boolean;
   /** L'arbitrage a été rendu : on ne le redemande pas. */
   arbitre: boolean;
+  /** Le client a confirmé l'hypothèse affichée comme déduction. */
+  deductionConfirmee: boolean;
   /** Le fil de questions sur ce point est terminé : il ne se rouvre pas seul. */
   clos: boolean;
   majLe: string;
@@ -58,6 +65,8 @@ export interface Client {
   nom: string;
   metier: string;
   demande: string;
+  /** Présent pour les ouvertures en libre-service. */
+  courriel?: string;
 }
 
 /** L'état complet d'un cadrage, tel que le client le récupère à l'ouverture. */
@@ -100,6 +109,8 @@ export interface Session {
    */
   reformulations: Record<string, string>;
   deductions: Record<string, string>;
+  /** Contradictions encore consultables après un rechargement. */
+  tensions: Record<string, Tension>;
   /** `null` tant que le périmètre n'a pas encore été évalué. */
   horsPerimetre: DecisionHorsPerimetre | null;
 }
@@ -117,6 +128,17 @@ export interface PatchSession {
   brief?: string;
   lien1?: string;
   lien2?: string;
+}
+
+/** État compact envoyé au moment où l'onglet passe en arrière-plan ou se ferme. */
+export interface SauvegardeUrgente {
+  patch: PatchSession;
+  reponses: Array<{
+    point: number;
+    confirme: boolean;
+    arbitre: boolean;
+    deductionConfirmee: boolean;
+  }>;
 }
 
 export interface PutReponse {
@@ -139,6 +161,8 @@ export interface LigneCadrage {
   statut: Statut;
   /** Nombre de points renseignés, sur `POINTS.length`. */
   couverture: number;
+  /** Index réellement couverts ; un simple compteur ne suffit pas pour dessiner la progression. */
+  pointsCouverts: number[];
   /** Le point en cours, ou `null` si le dossier est complet. */
   enCours: number | null;
   /** Une contradiction a été relevée et n'a pas encore été tranchée. */
@@ -275,7 +299,7 @@ export interface Analyse {
 
 export interface AnalyseGeneree extends Analyse {
   origine: Origine;
-  /** Vrai si des fichiers n'ont pas pu être lus (PDF, Word). */
+  /** Fichiers sans texte exploitable (image, tableur, PDF scanné ou corrompu). */
   fichiersIllisibles: string[];
   /** Même décision conditionnelle que dans l'entretien guidé. */
   horsPerimetre: DecisionHorsPerimetre;

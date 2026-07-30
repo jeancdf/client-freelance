@@ -16,12 +16,12 @@ export function Fin() {
         <p className="lbl fin__kicker">{transmis}</p>
         <h1 className="serif fin__title">C'est noté. Nicolas a votre dossier.</h1>
         <p className="fin__lead">
-          Il le lit avant votre rendez-vous et arrivera avec un chiffrage et ses questions
-          restantes — celles du budget, notamment.
+          Il le retrouve maintenant dans son tableau de suivi et peut le lire avant votre
+          rendez-vous.
         </p>
         <p className="fin__lead fin__lead--last">
-          Vous avez reçu une copie par courriel. Le lien reste ouvert : vous pouvez compléter ou
-          corriger jusqu'au rendez-vous.
+          Gardez ce lien pour relire votre dossier. Si vous le modifiez, il repassera en cours et
+          devra être validé de nouveau avant le chiffrage.
         </p>
         <div className="fin__actions">
           <button

@@ -109,8 +109,10 @@ l'URL avec `replaceState` puis entre directement dans la première question. Le
 visiteur a déjà cliqué une fois, on ne lui redemande pas de cliquer sur son
 propre lien — qui reste dans la barre d'adresse, prêt à être mis en favori.
 
-Le courriel saisi est conservé, mais **rien ne part encore** : si le client
-perd l'adresse de son onglet, il perd son dossier.
+Le courriel saisi est visible dans le tableau du prestataire pour permettre le
+contact, mais **aucun message automatique n'est promis ni envoyé**. Le lien
+reste donc le moyen de reprise du client tant qu'une intégration de messagerie
+n'est pas configurée.
 
 `trustProxy` est activé côté Fastify : derrière le Caddy mutualisé, sans lui
 toutes les requêtes porteraient l'adresse du proxy et la limite vaudrait pour
@@ -160,7 +162,14 @@ masquer le hors-périmètre est conservée même sans modèle, car elle détermi
 navigation et doit rester stable. Sur un dossier réel, le récapitulatif préfère
 n'afficher aucune reformulation plutôt que celle d'un autre client.
 
-Réglages : `CADRAGE_OPENROUTER_KEY`, `CADRAGE_MODELE`, `CADRAGE_LLM_TIMEOUT`.
+Réglages : `CADRAGE_OPENROUTER_KEY`, `CADRAGE_MODELE`,
+`CADRAGE_LLM_TIMEOUT`, `CADRAGE_MAX_GENERATIONS_HOUR`.
+
+Le chemin rapide extrait le texte des fichiers texte, PDF et Word `.docx`.
+Images et tableurs restent disponibles au prestataire mais sont signalés comme
+non lus. Une analyse dégradée ne couvre jamais un point par défaut. Les
+synthèses vérifiées sont versées au dossier uniquement après le clic du client,
+avec la provenance `document` plutôt que comme une fausse citation.
 
 ## Le fil d'un point
 
@@ -275,6 +284,10 @@ que `/api/sante` répond.
   jamais dans le dépôt et est copié dans chaque release avant le démarrage.
 - La base SQLite et les fichiers déposés vivent dans le volume
   `client-freelance_data`, monté sur `/data` : ils survivent aux déploiements.
+- Une sauvegarde SQLite à chaud et une copie des fichiers sont créées au
+  démarrage puis chaque jour dans `client-freelance_backups`. Les quatorze
+  dernières sont conservées. Ce second volume doit lui-même être copié hors du
+  VPS pour couvrir la perte complète de la machine.
 - La route HTTPS est déclarée dans `~/qr-compose.prod.yml` (stack `qr-code`) :
 
   ```
@@ -299,24 +312,17 @@ dans le `localStorage` — jamais dans une URL.
 
 ## Reste à faire
 
-- **PDF et Word.** Seuls le texte collé et les fichiers texte sont lus. Les
-  binaires sont nommés au client sur l'écran de dépôt (« je n'ai pas pu lire
-  *devis.pdf* ») plutôt qu'ignorés en silence, mais leur contenu n'entre pas
-  dans l'analyse. Le modèle accepte les images : une extraction PDF reste à
-  ajouter. C'est le manque le plus visible du chemin rapide, puisque la plupart
-  des cahiers des charges arrivent en PDF.
-- **Courriel.** Rien n'est envoyé nulle part. Le récapitulatif promet « vous
-  recevrez une copie par courriel », et l'ouverture en libre-service collecte
-  une adresse sans jamais s'en servir : le client qui perd son lien perd son
-  dossier, et Nicolas n'est pas prévenu qu'un cadrage s'est ouvert. C'est le
-  manque le plus visible depuis que la page publique existe.
-- **« C'est juste ».** Sur les blocs *déduit*, ce bouton n'enregistre pas
-  l'accord du client (« Corriger » renvoie bien au point). Il faudrait un champ
-  par déduction, comme `confirme` pour les reformulations.
-- **Sauvegarde.** Le volume `client-freelance_data` n'est ni sauvegardé ni
-  répliqué. Une perte du VPS emporte les cadrages en cours.
-- **Rétention.** Aucun lien n'expire ; les fichiers déposés restent
-  indéfiniment.
+- **Notification.** Le courriel est exploitable depuis le tableau, mais aucune
+  notification de nouveau dossier ni copie automatique n'est envoyée.
+- **Rétention.** Le prestataire peut supprimer un dossier actif et ses fichiers
+  depuis le tableau ; ses copies expirent avec la rotation des sauvegardes,
+  fixée à quatorze jours en production. Une durée d'expiration automatique des
+  dossiers actifs reste à décider métier avant toute suppression sans action
+  humaine.
+- **Sauvegarde hors site.** La rotation quotidienne protège le volume
+  principal, pas la perte totale du VPS : répliquer
+  `client-freelance_backups` vers un autre hébergeur reste une tâche
+  d'exploitation.
 - **Écran « Déroulé ».** Il illustre le mécanisme avec les réponses probables
   et n'est pas branché sur un dossier réel — c'est une vue de démonstration.
 

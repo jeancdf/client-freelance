@@ -7,6 +7,7 @@ import { brancherErreurs } from './erreurs.ts';
 import { routesClient } from './routes/client.ts';
 import { routesAdmin } from './routes/admin.ts';
 import { routesInscription } from './routes/inscription.ts';
+import { demarrerSauvegardes } from './maintenance.ts';
 
 const db = ouvrirBase(cheminBase);
 const { jeton, genere } = jetonAdmin();
@@ -31,6 +32,18 @@ const app = Fastify({
   trustProxy: true,
 });
 
+app.addHook('onSend', async (req, reply, payload) => {
+  reply.header('x-content-type-options', 'nosniff');
+  reply.header('referrer-policy', 'no-referrer');
+  reply.header('x-frame-options', 'DENY');
+  reply.header(
+    'content-security-policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  );
+  if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
+  return payload;
+});
+
 await app.register(multipart, { limits: { fileSize: config.tailleMaxFichier, files: 1 } });
 
 brancherErreurs(app);
@@ -38,8 +51,17 @@ brancherErreurs(app);
 routesClient(app, db);
 routesAdmin(app, db, jeton);
 routesInscription(app, db, jeton);
+const arreterSauvegardes = demarrerSauvegardes(db, app.log);
 
-app.get('/api/sante', async () => ({ ok: true }));
+app.get('/api/sante', async (_req, reply) => {
+  try {
+    db.prepare('SELECT 1').get();
+    return { ok: true, base: 'accessible' };
+  } catch {
+    reply.code(503);
+    return { ok: false, base: 'indisponible' };
+  }
+});
 
 if (config.servirDist) {
   const { default: statique } = await import('@fastify/static');
@@ -62,6 +84,7 @@ if (genere) {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    await arreterSauvegardes();
     await app.close();
     db.close();
     process.exit(0);

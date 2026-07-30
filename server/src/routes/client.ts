@@ -1,9 +1,11 @@
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
+import mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
 import {
   INDEX_CONTRAINTES,
   INDEX_HORS_PERIMETRE,
@@ -18,15 +20,18 @@ import type {
   OuvertureGeneree,
   PatchSession,
   PutReponse,
+  SauvegardeUrgente,
   SuiteReponse,
 } from '../../../shared/api.ts';
 import * as generation from '../generation.ts';
+import { estActif as modeleActif } from '../llm.ts';
 import { config, dossierFichiers } from '../config.ts';
 import type { Base } from '../db.ts';
 import {
   ErreurRequete,
   ajouterFichier,
   appliquerPatch,
+  dansTransaction,
   echangesDe,
   ecrireEchange,
   ecrireReponse,
@@ -42,6 +47,25 @@ import {
 
 /** Ce qu'on sait lire tel quel. Le reste est signalé au client, pas ignoré. */
 const LISIBLES = /^text\/|^application\/(json|xml)/;
+const EXTENSIONS_AUTORISEES = new Set([
+  '.csv',
+  '.docx',
+  '.json',
+  '.md',
+  '.ods',
+  '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.txt',
+  '.webp',
+  '.xls',
+  '.xlsx',
+  '.xml',
+]);
+const MAX_TEXTE_DOCUMENTS = 40_000;
+const HEURE_MS = 60 * 60 * 1000;
+const consommations = new Map<string, { debut: number; total: number }>();
 
 interface ParamsToken {
   token: string;
@@ -53,6 +77,53 @@ function exigerPoint(brut: string): number {
     throw new ErreurRequete(404, 'point inconnu');
   }
   return point;
+}
+
+function limiterGenerations(token: string, poids: number): void {
+  if (!modeleActif()) return;
+  const maintenant = Date.now();
+  const precedent = consommations.get(token);
+  const compteur =
+    !precedent || maintenant - precedent.debut >= HEURE_MS
+      ? { debut: maintenant, total: 0 }
+      : precedent;
+
+  if (compteur.total + poids > config.generationsMaxParHeure) {
+    throw new ErreurRequete(
+      429,
+      "La limite d'analyse de ce dossier est atteinte. Réessayez dans une heure.",
+    );
+  }
+  compteur.total += poids;
+  consommations.set(token, compteur);
+
+  if (consommations.size > 1_000) {
+    for (const [cle, valeur] of consommations) {
+      if (maintenant - valeur.debut >= HEURE_MS) consommations.delete(cle);
+    }
+  }
+}
+
+async function extraireTexte(
+  fichier: ReturnType<typeof fichiersDe>[number],
+): Promise<string | null> {
+  const extension = extname(fichier.nom).toLowerCase();
+  if (LISIBLES.test(fichier.type_mime) || ['.txt', '.md', '.csv', '.json', '.xml'].includes(extension)) {
+    return readFile(fichier.chemin, 'utf8');
+  }
+  if (extension === '.docx') {
+    const resultat = await mammoth.extractRawText({ path: fichier.chemin });
+    return resultat.value;
+  }
+  if (extension === '.pdf') {
+    const parseur = new PDFParse({ data: await readFile(fichier.chemin) });
+    try {
+      return (await parseur.getText()).text;
+    } finally {
+      await parseur.destroy();
+    }
+  }
+  return null;
 }
 
 /**
@@ -93,6 +164,39 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     return { majLe: ligne.maj_le, dureeMs: ligne.duree_ms };
   });
 
+  app.post<{ Params: ParamsToken; Body: SauvegardeUrgente }>(
+    '/api/cadrage/:token/sauvegarde',
+    async (req, reply) => {
+      const ligne = charger(req.params.token);
+      const patch = req.body?.patch ?? {};
+      const reponses = req.body?.reponses ?? [];
+      if (!Array.isArray(reponses) || reponses.length > POINTS.length) {
+        throw new ErreurRequete(400, 'Sauvegarde de réponses invalide.');
+      }
+
+      dansTransaction(db, () => {
+        if (Object.keys(patch).length) appliquerPatch(db, ligne, patch);
+        for (const reponse of reponses) {
+          if (
+            typeof reponse?.confirme !== 'boolean' ||
+            typeof reponse?.arbitre !== 'boolean' ||
+            typeof reponse?.deductionConfirmee !== 'boolean'
+          ) {
+            throw new ErreurRequete(400, 'Drapeaux de réponse invalides.');
+          }
+          marquerReponse(db, ligne, exigerPoint(String(reponse.point)), {
+            confirme: reponse.confirme,
+            arbitre: reponse.arbitre,
+            deductionConfirmee: reponse.deductionConfirmee,
+          });
+        }
+      });
+
+      reply.code(204);
+      return null;
+    },
+  );
+
   /**
    * Écrit la réponse, puis rend ce que le modèle en tire : la reformulation à
    * faire valider, la contradiction éventuelle, la déduction. Les trois sont
@@ -102,6 +206,7 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     '/api/cadrage/:token/reponse/:point',
     async (req): Promise<SuiteReponse> => {
       const ligne = charger(req.params.token);
+      limiterGenerations(req.params.token, 6);
       const point = exigerPoint(req.params.point);
       const rang = Number(req.body?.rang ?? 0);
       if (point === INDEX_CONTRAINTES && rang === 0) {
@@ -207,7 +312,10 @@ export function routesClient(app: FastifyInstance, db: Base): void {
    * l'enregistrement de fond repasse ces drapeaux à chaque changement d'état, il
    * ne doit surtout pas réécrire un échange au passage.
    */
-  app.patch<{ Params: ParamsToken & { point: string }; Body: { confirme?: boolean; arbitre?: boolean } }>(
+  app.patch<{
+    Params: ParamsToken & { point: string };
+    Body: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean };
+  }>(
     '/api/cadrage/:token/reponse/:point',
     async (req) => {
       const ligne = charger(req.params.token);
@@ -225,6 +333,7 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     '/api/cadrage/:token/point/:point/ouverture',
     async (req, reply): Promise<OuvertureGeneree | undefined> => {
       const ligne = charger(req.params.token);
+      limiterGenerations(req.params.token, 1);
       const point = exigerPoint(req.params.point);
       const rang = Number(req.query.rang ?? 0);
       const etat = point === INDEX_HORS_PERIMETRE ? session(db, ligne) : null;
@@ -257,6 +366,7 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     '/api/cadrage/:token/point/:point/aide',
     async (req): Promise<AideGeneree> => {
       const ligne = charger(req.params.token);
+      limiterGenerations(req.params.token, 2);
       const point = exigerPoint(req.params.point);
       const etat = point === INDEX_HORS_PERIMETRE ? session(db, ligne) : null;
       if (
@@ -274,27 +384,30 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     },
   );
 
-  /**
-   * Lit le document déposé et dit quels points utiles il couvre.
-   * Les fichiers texte sont joints au brief ; les binaires (PDF, Word) sont
-   * signalés au client plutôt que passés sous silence.
-   */
-  app.post<{ Params: ParamsToken }>('/api/cadrage/:token/analyse', async (req): Promise<AnalyseGeneree> => {
-    const ligne = charger(req.params.token);
-
+  /** Lit les formats textuels, PDF et Word, puis dit quels points ils couvrent. */
+  const analyserDossier = async (
+    ligne: ReturnType<typeof charger>,
+  ): Promise<AnalyseGeneree> => {
     const morceaux: string[] = [];
-    if (ligne.brief.trim()) morceaux.push(ligne.brief.trim());
+    let caracteres = 0;
+    const ajouter = (titre: string, texte: string) => {
+      const propre = texte.trim();
+      const disponibles = MAX_TEXTE_DOCUMENTS - caracteres;
+      if (!propre || disponibles <= 0) return;
+      const extrait = propre.slice(0, disponibles);
+      morceaux.push(titre ? `--- ${titre} ---\n${extrait}` : extrait);
+      caracteres += extrait.length;
+    };
+
+    ajouter('', ligne.brief);
 
     const illisibles: string[] = [];
     for (const fichier of fichiersDe(db, ligne.id)) {
-      if (LISIBLES.test(fichier.type_mime) || /\.(txt|md|csv|json)$/i.test(fichier.nom)) {
-        try {
-          const contenu = await readFile(fichier.chemin, 'utf8');
-          morceaux.push(`--- ${fichier.nom} ---\n${contenu.slice(0, 40_000)}`);
-        } catch {
-          illisibles.push(fichier.nom);
-        }
-      } else {
+      try {
+        const contenu = await extraireTexte(fichier);
+        if (contenu?.trim()) ajouter(fichier.nom, contenu);
+        else illisibles.push(fichier.nom);
+      } catch {
         illisibles.push(fichier.nom);
       }
     }
@@ -343,7 +456,60 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       fichiersIllisibles: illisibles,
       horsPerimetre,
     };
-  });
+  };
+
+  app.post<{ Params: ParamsToken }>(
+    '/api/cadrage/:token/analyse',
+    async (req): Promise<AnalyseGeneree> => {
+      const ligne = charger(req.params.token);
+      limiterGenerations(req.params.token, 8);
+      return analyserDossier(ligne);
+    },
+  );
+
+  /**
+   * Verse au dossier les seuls points réellement couverts, après le clic
+   * explicite du client. Une synthèse de document reste identifiée comme telle :
+   * elle ne sera jamais affichée comme une citation saisie dans l'entretien.
+   */
+  app.post<{ Params: ParamsToken }>(
+    '/api/cadrage/:token/analyse/appliquer',
+    async (req) => {
+      const ligne = charger(req.params.token);
+      limiterGenerations(req.params.token, 8);
+      const resultat = await analyserDossier(ligne);
+      if (resultat.origine === 'repli') {
+        throw new ErreurRequete(
+          503,
+          "L'analyse automatique n'est pas disponible : aucun point n'a été importé.",
+        );
+      }
+
+      const avant = session(db, ligne);
+      const appliques: number[] = [];
+      dansTransaction(db, () => {
+        for (const point of resultat.points) {
+          if (!point.couvert || !point.reponse.trim() || avant.reponses[String(point.index)]) {
+            continue;
+          }
+          ecrireReponse(
+            db,
+            ligne,
+            point.index,
+            {
+              texte: point.reponse,
+              confirme: true,
+              clore: true,
+            },
+            'document',
+          );
+          appliques.push(point.index);
+        }
+      });
+
+      return { appliques };
+    },
+  );
 
   // Le dossier reste modifiable après validation : l'écran de fin le promet
   // explicitement (« le lien reste ouvert jusqu'au rendez-vous »).
@@ -354,8 +520,23 @@ export function routesClient(app: FastifyInstance, db: Base): void {
 
   app.post<{ Params: ParamsToken }>('/api/cadrage/:token/fichier', async (req, reply) => {
     const ligne = charger(req.params.token);
+    const existants = fichiersDe(db, ligne.id);
+    if (existants.length >= config.fichiersMaxParDossier) {
+      throw new ErreurRequete(
+        413,
+        `Ce dossier accepte au maximum ${config.fichiersMaxParDossier} fichiers.`,
+      );
+    }
     const partie = await req.file();
     if (!partie) throw new ErreurRequete(400, 'Aucun fichier reçu.');
+    const nom = basename(partie.filename.replace(/\\/g, '/')).slice(0, 180);
+    if (!nom || !EXTENSIONS_AUTORISEES.has(extname(nom).toLowerCase())) {
+      partie.file.resume();
+      throw new ErreurRequete(
+        415,
+        'Format non accepté. Utilisez du texte, PDF, Word (.docx), image ou tableur.',
+      );
+    }
 
     await mkdir(dossierFichiers, { recursive: true });
     const chemin = join(dossierFichiers, `${ligne.id}-${randomUUID()}`);
@@ -373,14 +554,27 @@ export function routesClient(app: FastifyInstance, db: Base): void {
       await unlink(chemin).catch(() => {});
       throw new ErreurRequete(413, `Fichier trop volumineux (max ${Math.round(config.tailleMaxFichier / 1024 / 1024)} Mo).`);
     }
+    const tailleExistante = existants.reduce((total, fichier) => total + fichier.taille, 0);
+    if (tailleExistante + taille > config.stockageMaxParDossier) {
+      await unlink(chemin).catch(() => {});
+      throw new ErreurRequete(
+        413,
+        `Le dossier dépasse ${Math.round(config.stockageMaxParDossier / 1024 / 1024)} Mo de fichiers.`,
+      );
+    }
 
     reply.code(201);
-    return ajouterFichier(db, ligne.id, {
-      nom: partie.filename,
-      taille,
-      typeMime: partie.mimetype,
-      chemin,
-    });
+    try {
+      return ajouterFichier(db, ligne.id, {
+        nom,
+        taille,
+        typeMime: partie.mimetype,
+        chemin,
+      });
+    } catch (cause) {
+      await unlink(chemin).catch(() => {});
+      throw cause;
+    }
   });
 
   app.get<{ Params: ParamsToken & { id: string } }>('/api/cadrage/:token/fichier/:id', async (req, reply) => {
@@ -400,8 +594,10 @@ export function routesClient(app: FastifyInstance, db: Base): void {
     const ligne = charger(req.params.token);
     const fichier = fichierParId(db, ligne.id, req.params.id);
     if (fichier) {
-      await unlink(fichier.chemin).catch(() => {});
       supprimerFichier(db, ligne.id, fichier.id);
+      await unlink(fichier.chemin).catch((cause) => {
+        req.log.error({ cause, fichier: fichier.id }, 'fichier supprimé de la base mais pas du disque');
+      });
     }
     reply.code(204);
     return null;

@@ -16,7 +16,7 @@ import {
 } from '../../shared/points.ts';
 import { ouvrirBase, type Base } from './db.ts';
 import { brancherErreurs } from './erreurs.ts';
-import { creer, session } from './repo.ts';
+import { creer, ecrireReponse, parId, session } from './repo.ts';
 import { routesClient } from './routes/client.ts';
 
 let app: FastifyInstance;
@@ -42,6 +42,37 @@ after(async () => {
 });
 
 describe('les questions successives d’un point', () => {
+  it('enregistre en une fois le brouillon et les validations à la suspension de l’onglet', async () => {
+    const ligne = creer(db, {
+      nom: 'Camille sauvegarde',
+      metier: 'coach',
+      demande: 'Mieux suivre mes clients',
+    });
+    ecrireReponse(db, ligne, 0, { texte: 'Une réponse déjà écrite.', clore: true });
+
+    const reponse = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/sauvegarde`,
+      payload: {
+        patch: { draft: 'Un brouillon récent', step: 1, rang: 0 },
+        reponses: [
+          {
+            point: 0,
+            confirme: true,
+            arbitre: false,
+            deductionConfirmee: false,
+          },
+        ],
+      },
+    });
+
+    assert.equal(reponse.statusCode, 204);
+    const relue = session(db, parId(db, ligne.id)!);
+    assert.equal(relue.draft, 'Un brouillon récent');
+    assert.equal(relue.step, 1);
+    assert.equal(relue.reponses['0'].confirme, true);
+  });
+
   it('clôt un point après une seule réponse précise quand aucun second tour n’est requis', async () => {
     const ligne = creer(db, {
       nom: 'Camille',
@@ -364,5 +395,82 @@ describe('les questions successives d’un point', () => {
     );
     assert.equal(point?.couvert, false);
     assert.match(point?.manque ?? '', /paiement en ligne/i);
+  });
+
+  it('importe une synthèse vérifiée seulement après l’accord explicite du client', async () => {
+    const demande = 'Réduire le temps perdu sur les demandes';
+    const brief =
+      'Je perds deux heures par jour à recopier les demandes reçues par téléphone.';
+    const ligne = creer(db, {
+      nom: 'Camille import',
+      metier: 'artisan',
+      demande,
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/cadrage/${ligne.token}`,
+      payload: { brief, voie: 'rapide' },
+    });
+
+    const cleContexte = empreinte(
+      JSON.stringify({
+        demande,
+        brief,
+        maturite: '',
+        reponses: {},
+        texteSupplementaire: brief,
+      }),
+    );
+    db.prepare(
+      `INSERT INTO generation (cadrage_id, point, genre, cle, contenu, cree_le)
+       VALUES (?, -1, 'analyse', ?, ?, ?)`,
+    ).run(
+      ligne.id,
+      empreinte(`analyse-verifiee-v1|${cleContexte}`),
+      JSON.stringify({
+        points: POINTS.map((_, index) =>
+          index === 0
+            ? {
+                index,
+                couvert: true,
+                extrait: 'Je perds deux heures par jour',
+                reponse: 'Je perds deux heures par jour à recopier les demandes.',
+                manque: '',
+              }
+            : {
+                index,
+                couvert: false,
+                extrait: '',
+                reponse: '',
+                manque: `Le point ${index} reste à préciser.`,
+              },
+        ),
+        couverts: 1,
+      }),
+      new Date().toISOString(),
+    );
+    db.prepare(
+      `INSERT INTO generation (cadrage_id, point, genre, cle, contenu, cree_le)
+       VALUES (?, ?, 'hors-perimetre', ?, ?, ?)`,
+    ).run(
+      ligne.id,
+      INDEX_HORS_PERIMETRE,
+      empreinte(`${demande}||${brief}`),
+      JSON.stringify({ afficher: false, besoin: '' }),
+      new Date().toISOString(),
+    );
+
+    assert.equal(session(db, ligne).reponses['0'], undefined);
+    const reponse = await app.inject({
+      method: 'POST',
+      url: `/api/cadrage/${ligne.token}/analyse/appliquer`,
+    });
+
+    assert.equal(reponse.statusCode, 200);
+    assert.deepEqual(reponse.json<{ appliques: number[] }>().appliques, [0]);
+    const importee = session(db, ligne).reponses['0'];
+    assert.equal(importee.source, 'document');
+    assert.equal(importee.confirme, true);
+    assert.equal(importee.clos, true);
   });
 });

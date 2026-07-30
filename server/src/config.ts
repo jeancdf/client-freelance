@@ -17,6 +17,13 @@ export const config = {
   servirDist: process.env.CADRAGE_SERVE_DIST === '1',
   dossierDist: join(racine, 'dist'),
   tailleMaxFichier: Number(process.env.CADRAGE_MAX_UPLOAD ?? 25 * 1024 * 1024),
+  fichiersMaxParDossier: Number(process.env.CADRAGE_MAX_FILES ?? 8),
+  stockageMaxParDossier: Number(process.env.CADRAGE_MAX_STORAGE ?? 100 * 1024 * 1024),
+  generationsMaxParHeure: Number(process.env.CADRAGE_MAX_GENERATIONS_HOUR ?? 100),
+  dossierSauvegardes: process.env.CADRAGE_BACKUP_DIR
+    ? resolve(process.env.CADRAGE_BACKUP_DIR)
+    : '',
+  sauvegardesMax: Number(process.env.CADRAGE_BACKUPS_KEEP ?? 14),
 };
 
 export const cheminBase = join(config.dossierDonnees, 'cadrage.db');

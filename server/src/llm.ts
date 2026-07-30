@@ -108,10 +108,16 @@ export async function generer<T>(
     throw new ErreurLlm('Le modèle a répondu autre chose que du JSON.');
   }
 
-  return {
-    valeur,
-    cout: { tokens: donnees.usage?.total_tokens ?? 0, dollars: donnees.usage?.cost ?? 0 },
+  const cout = {
+    tokens: donnees.usage?.total_tokens ?? 0,
+    dollars: donnees.usage?.cost ?? 0,
   };
+  // Pas de contenu ni d'identité dans le journal : seulement de quoi suivre
+  // la consommation réelle par capacité et détecter une dérive de coût.
+  console.info(
+    `[llm] ${nomSchema} · ${cout.tokens} tokens · $${cout.dollars.toFixed(6)}`,
+  );
+  return { valeur, cout };
 }
 
 /** Raccourci de schéma : un objet dont toutes les propriétés sont requises. */

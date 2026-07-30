@@ -60,11 +60,14 @@ export function routesAdmin(app: FastifyInstance, db: Base, jeton: string): void
     exigerJeton(req);
     const ligne = parId(db, req.params.id);
     if (ligne) {
-      // Les lignes partent en cascade ; les fichiers sur disque, non.
-      for (const fichier of fichiersDe(db, ligne.id)) {
-        await unlink(fichier.chemin).catch(() => {});
-      }
+      const fichiers = fichiersDe(db, ligne.id);
       supprimerCadrage(db, ligne.id);
+      // Les lignes partent en cascade ; les fichiers sur disque, non.
+      for (const fichier of fichiers) {
+        await unlink(fichier.chemin).catch((cause) => {
+          req.log.error({ cause, fichier: fichier.id }, 'fichier orphelin après suppression');
+        });
+      }
     }
     reply.code(204);
     return null;

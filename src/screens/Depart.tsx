@@ -86,7 +86,7 @@ export function Depart() {
           </div>
 
           <p className="note depart__note">
-            Enregistré à chaque mot · fermez cette page, le lien vous ramènera ici
+            Enregistrement automatique · fermez cette page, le lien vous ramènera ici
           </p>
         </div>
       </main>

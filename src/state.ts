@@ -16,6 +16,7 @@ import type {
   Mode,
   Ouverture,
   Session,
+  SourceReponse,
   Statut,
   Tension,
   Voie,
@@ -67,6 +68,8 @@ export interface State {
   voie: Voie;
   /** Les mots du client, par index de point. Rien n'est écrit ici sans lui. */
   answers: Record<number, string>;
+  /** Provenance de chaque réponse, pour distinguer une citation d'une synthèse de document. */
+  sources: Record<number, SourceReponse>;
   /** Reformulations validées par le client — la trace de ce qu'il a accepté. */
   confirmed: Record<number, boolean>;
   /** Points dont l'arbitrage a déjà été rendu : on ne le redemande pas. */
@@ -102,6 +105,8 @@ export interface State {
   aide: Record<number, Aide>;
   /** Ce qui a été déduit de chaque réponse, pour le récapitulatif. */
   deductions: Record<number, string>;
+  /** Hypothèses explicitement confirmées par le client. */
+  deductionsConfirmed: Record<number, boolean>;
   /**
    * Les reformulations acceptées, par point. Le récapitulatif est le document
    * livré : il cite la reformulation du client, pas celle de la maquette, et
@@ -113,6 +118,8 @@ export interface State {
   reformulation: string | null;
   /** La contradiction relevée sur le point en cours, s'il y en a une. */
   tensionCourante: Tension | null;
+  /** Contradictions par point, persistées pour survivre à un rechargement. */
+  tensions: Record<number, Tension>;
   /** Vrai pendant que le modèle travaille : les boutons attendent. */
   occupe: boolean;
 
@@ -127,6 +134,7 @@ export const initialState: State = {
   mode: 'long',
   voie: 'entretien',
   answers: {},
+  sources: {},
   confirmed: {},
   tensionResolved: {},
   clos: {},
@@ -146,9 +154,11 @@ export const initialState: State = {
   rang: 0,
   aide: {},
   deductions: {},
+  deductionsConfirmed: {},
   reformulations: {},
   reformulation: null,
   tensionCourante: null,
+  tensions: {},
   occupe: false,
   scrollTick: 0,
 };
@@ -164,6 +174,7 @@ export type Action =
       type: 'suite';
       point: number;
       texte: string;
+      source: SourceReponse;
       /** La question suivante sur ce point, ou `null` s'il est clos. */
       question: Ouverture | null;
       rang: number;
@@ -192,6 +203,7 @@ export type Action =
   | { type: 'tensionKeep' }
   | { type: 'confirmReform' }
   | { type: 'rejectReform' }
+  | { type: 'confirmDeduction'; point: number }
   | { type: 'togglePlan' }
   | { type: 'switchCourt' }
   | { type: 'goScreen'; screen: Screen }
@@ -329,10 +341,23 @@ export function pointsEcrits(state: State): number[] {
  * bouton doit y mener — d'où un seul calcul, partagé.
  */
 export function pointDeReprise(state: State): number {
-  if (state.session?.rang !== null && state.session?.rang !== undefined) {
+  const visibles = indicesPointsVisibles(state);
+  const tensionEnAttente = visibles.find(
+    (k) => state.tensions[k] && !state.tensionResolved[k],
+  );
+  if (tensionEnAttente !== undefined) return tensionEnAttente;
+
+  if (state.mode === 'long') {
+    const reformulationEnAttente = visibles.find(
+      (k) => state.reformulations[k] && !state.confirmed[k],
+    );
+    if (reformulationEnAttente !== undefined) return reformulationEnAttente;
+  }
+
+  if (state.session?.rang !== null && state.session?.rang !== undefined && state.draft.trim()) {
     return currentIndex(state);
   }
-  const visibles = indicesPointsVisibles(state);
+
   const ouvert = visibles.find(
     (k) => state.answers[k] !== undefined && !state.clos[k],
   );
@@ -368,8 +393,8 @@ function reponseDeQuestion(state: State, point: number, rang: number): string {
 }
 
 /** Le serveur indexe par chaîne, à cause de JSON ; l'état indexe par nombre. */
-function parIndex(source: Record<string, string>): Record<number, string> {
-  const par: Record<number, string> = {};
+function parIndex<T>(source: Record<string, T>): Record<number, T> {
+  const par: Record<number, T> = {};
   for (const [cle, valeur] of Object.entries(source)) par[Number(cle)] = valeur;
   return par;
 }
@@ -378,6 +403,12 @@ function sansPoint<T>(source: Record<number, T>, point: number): Record<number, 
   const copie = { ...source };
   delete copie[point];
   return copie;
+}
+
+/** Reflète immédiatement l'invalidation que le serveur applique à une modification de fond. */
+function dossierAModifier(state: State): SessionMeta | null {
+  if (!state.session || state.session.statut === 'en_cours') return state.session;
+  return { ...state.session, statut: 'en_cours', valideLe: null };
 }
 
 function sansBrouillonsDepuis(
@@ -472,6 +503,7 @@ function advance(state: State, from: number): State {
 }
 
 function goScreen(state: State, screen: Screen, extra: Partial<State> = {}): State {
+  const changeVoie = screen === 'rapide' && state.voie !== 'rapide';
   return {
     ...state,
     screen,
@@ -481,6 +513,7 @@ function goScreen(state: State, screen: Screen, extra: Partial<State> = {}): Sta
     // Ouvrir le dépôt de document, c'est choisir cette voie : le prestataire
     // doit le voir dans son tableau, même si le client n'a encore rien déposé.
     ...(screen === 'rapide' ? { voie: 'rapide' as Voie } : {}),
+    ...(changeVoie ? { session: dossierAModifier(state) } : {}),
     ...extra,
   };
 }
@@ -505,16 +538,20 @@ export function reducer(state: State, action: Action): State {
     case 'hydrate': {
       const s = action.session;
       const answers: Record<number, string> = {};
+      const sources: Record<number, SourceReponse> = {};
       const confirmed: Record<number, boolean> = {};
       const tensionResolved: Record<number, boolean> = {};
+      const deductionsConfirmed: Record<number, boolean> = {};
       const clos: Record<number, boolean> = {};
       const echanges: Record<number, Echange[]> = {};
 
       for (const [cle, reponse] of Object.entries(s.reponses)) {
         const index = Number(cle);
         answers[index] = reponse.texte;
+        sources[index] = reponse.source ?? 'client';
         if (reponse.confirme) confirmed[index] = true;
         if (reponse.arbitre) tensionResolved[index] = true;
+        if (reponse.deductionConfirmee) deductionsConfirmed[index] = true;
         if (reponse.clos) clos[index] = true;
       }
       // Une question posée sans réponse est celle que le client avait sous les
@@ -557,6 +594,7 @@ export function reducer(state: State, action: Action): State {
         lien1: s.lien1,
         lien2: s.lien2,
         answers,
+        sources,
         confirmed,
         tensionResolved,
         clos,
@@ -577,6 +615,8 @@ export function reducer(state: State, action: Action): State {
         // textes de la maquette.
         reformulations: parIndex(s.reformulations),
         deductions: parIndex(s.deductions),
+        deductionsConfirmed,
+        tensions: parIndex(s.tensions ?? {}),
         screen: ecranDeReprise(s, Object.keys(answers).length > 0),
         scrollTick: state.scrollTick + 1,
       };
@@ -593,7 +633,13 @@ export function reducer(state: State, action: Action): State {
 
     case 'depart':
       if (!state.session) return state;
-      return { ...state, session: { ...state.session, maturite: action.maturite } };
+      return {
+        ...state,
+        session: {
+          ...(dossierAModifier(state) ?? state.session),
+          maturite: action.maturite,
+        },
+      };
 
     case 'aide':
       return { ...state, aide: { ...state.aide, [action.point]: action.aide } };
@@ -612,6 +658,7 @@ export function reducer(state: State, action: Action): State {
     case 'suite': {
       const point = action.point;
       const texteChange = state.answers[point] !== action.texte;
+      const session = texteChange ? dossierAModifier(state) : state.session;
       const drafts = sansBrouillonsDepuis(state.drafts, point, state.rang);
       const confirmed = texteChange
         ? sansPoint(state.confirmed, point)
@@ -619,6 +666,9 @@ export function reducer(state: State, action: Action): State {
       const tensionResolved = texteChange
         ? sansPoint(state.tensionResolved, point)
         : state.tensionResolved;
+      const deductionsConfirmed = texteChange
+        ? sansPoint(state.deductionsConfirmed, point)
+        : state.deductionsConfirmed;
 
       // Le fil continue : on reste sur le même point, une question plus loin.
       // Le brouillon repart à vide — c'est une nouvelle question, pas une
@@ -626,7 +676,9 @@ export function reducer(state: State, action: Action): State {
       if (action.question) {
         return {
           ...state,
+          session,
           answers: { ...state.answers, [point]: action.texte },
+          sources: { ...state.sources, [point]: action.source },
           echanges: {
             ...state.echanges,
             [point]: [...action.echanges, { question: action.question.question, reponse: '' }],
@@ -637,6 +689,7 @@ export function reducer(state: State, action: Action): State {
           },
           confirmed,
           tensionResolved,
+          deductionsConfirmed,
           clos: sansPoint(state.clos, point),
           deductions: texteChange
             ? sansPoint(state.deductions, point)
@@ -644,6 +697,7 @@ export function reducer(state: State, action: Action): State {
           reformulations: texteChange
             ? sansPoint(state.reformulations, point)
             : state.reformulations,
+          tensions: texteChange ? sansPoint(state.tensions, point) : state.tensions,
           horsPerimetre:
             point === INDEX_PERIMETRE ? null : state.horsPerimetre,
           drafts: {
@@ -658,10 +712,13 @@ export function reducer(state: State, action: Action): State {
 
       const base: State = {
         ...state,
+        session,
         answers: { ...state.answers, [point]: action.texte },
+        sources: { ...state.sources, [point]: action.source },
         echanges: { ...state.echanges, [point]: action.echanges },
         confirmed,
         tensionResolved,
+        deductionsConfirmed,
         clos: { ...state.clos, [point]: true },
         deductions: action.deduction
           ? { ...state.deductions, [point]: action.deduction }
@@ -676,6 +733,11 @@ export function reducer(state: State, action: Action): State {
           : texteChange
             ? sansPoint(state.reformulations, point)
             : state.reformulations,
+        tensions: action.tension
+          ? { ...state.tensions, [point]: action.tension }
+          : texteChange
+            ? sansPoint(state.tensions, point)
+            : state.tensions,
         horsPerimetre: action.horsPerimetre ?? state.horsPerimetre,
         drafts,
         draft: '',
@@ -700,7 +762,13 @@ export function reducer(state: State, action: Action): State {
 
     case 'fichiers':
       if (!state.session) return state;
-      return { ...state, session: { ...state.session, fichiers: action.fichiers } };
+      return {
+        ...state,
+        session: {
+          ...(dossierAModifier(state) ?? state.session),
+          fichiers: action.fichiers,
+        },
+      };
 
     case 'dossierValide':
       if (!state.session) return state;
@@ -723,10 +791,15 @@ export function reducer(state: State, action: Action): State {
         draft: '',
         drafts: {},
         answers: {},
+        sources: {},
         confirmed: {},
         tensionResolved: {},
+        deductions: {},
+        deductionsConfirmed: {},
+        reformulations: {},
         clos: {},
         echanges: {},
+        tensions: {},
         horsPerimetre: null,
       });
 
@@ -739,10 +812,15 @@ export function reducer(state: State, action: Action): State {
         draft: '',
         drafts: {},
         answers: {},
+        sources: {},
         confirmed: {},
         tensionResolved: {},
+        deductions: {},
+        deductionsConfirmed: {},
+        reformulations: {},
         clos: {},
         echanges: {},
+        tensions: {},
         horsPerimetre: null,
       });
 
@@ -780,6 +858,9 @@ export function reducer(state: State, action: Action): State {
       const tensionResolved = texteChange
         ? sansPoint(state.tensionResolved, i)
         : state.tensionResolved;
+      const deductionsConfirmed = texteChange
+        ? sansPoint(state.deductionsConfirmed, i)
+        : state.deductionsConfirmed;
       const drafts = sansBrouillonsDepuis(state.drafts, i, state.rang);
 
       // La démonstration suit le contrat du point. Seules les sections qui
@@ -803,6 +884,7 @@ export function reducer(state: State, action: Action): State {
           },
           confirmed,
           tensionResolved,
+          deductionsConfirmed,
           clos: sansPoint(state.clos, i),
           deductions: texteChange ? sansPoint(state.deductions, i) : state.deductions,
           reformulations: texteChange
@@ -833,6 +915,7 @@ export function reducer(state: State, action: Action): State {
           echanges: { ...state.echanges, [i]: fil },
           confirmed,
           tensionResolved,
+          deductionsConfirmed,
           clos: { ...state.clos, [i]: true },
           drafts,
           draft: '',
@@ -847,6 +930,7 @@ export function reducer(state: State, action: Action): State {
         echanges: { ...state.echanges, [i]: fil },
         confirmed,
         tensionResolved,
+        deductionsConfirmed,
         clos: { ...state.clos, [i]: true },
         deductions: texteChange ? sansPoint(state.deductions, i) : state.deductions,
         reformulations: texteChange
@@ -936,11 +1020,20 @@ export function reducer(state: State, action: Action): State {
     case 'rejectReform':
       return goQuestion(state, i, dernierRangRepondu(state, i) ?? 0);
 
+    case 'confirmDeduction':
+      return {
+        ...state,
+        deductionsConfirmed: {
+          ...state.deductionsConfirmed,
+          [action.point]: true,
+        },
+      };
+
     case 'togglePlan':
       return { ...state, planOpen: !state.planOpen };
 
     case 'switchCourt':
-      return { ...state, mode: 'court' };
+      return { ...state, mode: 'court', session: dossierAModifier(state) };
 
     case 'goScreen':
       return goScreen(state, action.screen);
@@ -962,9 +1055,25 @@ export function reducer(state: State, action: Action): State {
 
     case 'resumeAt3': {
       if (state.session) {
-        return state.session.rang === null
-          ? goStep(state, pointDeReprise(state))
-          : goQuestion(state, currentIndex(state), state.rang);
+        const point = pointDeReprise(state);
+        const tension = state.tensions[point];
+        if (tension && !state.tensionResolved[point]) {
+          return goStep(state, point, {
+            tension: true,
+            tensionCourante: tension,
+          });
+        }
+        const reformulation = state.reformulations[point];
+        if (state.mode === 'long' && reformulation && !state.confirmed[point]) {
+          return goScreen(state, 'reform', {
+            step: point,
+            reformulation,
+          });
+        }
+        if (state.session.rang !== null && state.draft.trim()) {
+          return goQuestion(state, currentIndex(state), state.rang);
+        }
+        return goStep(state, point);
       }
       const demo = demoAnswers(2);
       return goScreen(state, 'entretien', {
@@ -992,12 +1101,24 @@ export function reducer(state: State, action: Action): State {
     }
 
     case 'setBrief':
-      return { ...state, brief: action.value };
+      return {
+        ...state,
+        brief: action.value,
+        session: action.value !== state.brief ? dossierAModifier(state) : state.session,
+      };
 
     case 'setLien1':
-      return { ...state, lien1: action.value };
+      return {
+        ...state,
+        lien1: action.value,
+        session: action.value !== state.lien1 ? dossierAModifier(state) : state.session,
+      };
 
     case 'setLien2':
-      return { ...state, lien2: action.value };
+      return {
+        ...state,
+        lien2: action.value,
+        session: action.value !== state.lien2 ? dossierAModifier(state) : state.session,
+      };
   }
 }

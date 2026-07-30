@@ -10,6 +10,7 @@ import type {
   PutReponse,
   Reponse,
   ReponseCadrages,
+  SauvegardeUrgente,
   Session,
   SuiteReponse,
 } from '../../shared/api';
@@ -60,6 +61,24 @@ export const lireSession = (token: string) => requete<Session>(`/cadrage/${token
 export const patcher = (token: string, patch: PatchSession) =>
   requete<{ majLe: string; dureeMs: number }>(`/cadrage/${token}`, json('PATCH', patch));
 
+/** Dernière chance d'écrire un brouillon quand le navigateur suspend l'onglet. */
+export function sauvegarderAvantFermeture(token: string, entree: SauvegardeUrgente): void {
+  const url = `/api/cadrage/${token}/sauvegarde`;
+  const corps = JSON.stringify(entree);
+  if (
+    navigator.sendBeacon &&
+    navigator.sendBeacon(url, new Blob([corps], { type: 'application/json' }))
+  ) {
+    return;
+  }
+  void fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: corps,
+    keepalive: true,
+  });
+}
+
 /**
  * Écrit la réponse et rend ce que le modèle en tire. C'est le seul appel qui
  * fait attendre le client : il porte la reformulation et la contradiction.
@@ -71,7 +90,7 @@ export const ecrireReponse = (token: string, point: number, entree: PutReponse) 
 export const marquerReponse = (
   token: string,
   point: number,
-  drapeaux: { confirme?: boolean; arbitre?: boolean },
+  drapeaux: { confirme?: boolean; arbitre?: boolean; deductionConfirmee?: boolean },
 ) => requete<Reponse>(`/cadrage/${token}/reponse/${point}`, json('PATCH', drapeaux));
 
 export const lireOuverture = (token: string, point: number, rang = 0) =>
@@ -84,6 +103,12 @@ export const lireAide = (token: string, point: number) =>
 
 export const analyser = (token: string) =>
   requete<AnalyseGeneree>(`/cadrage/${token}/analyse`, { method: 'POST' });
+
+/** Importe les synthèses que le client vient explicitement d'accepter. */
+export const appliquerAnalyse = (token: string) =>
+  requete<{ appliques: number[] }>(`/cadrage/${token}/analyse/appliquer`, {
+    method: 'POST',
+  });
 
 export const validerDossier = (token: string) =>
   requete<{ statut: 'valide'; valideLe: string; dureeMs: number }>(
@@ -114,4 +139,10 @@ export const creerCadrage = (jeton: string, entree: CreationCadrage) =>
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${jeton}` },
     body: JSON.stringify(entree),
+  });
+
+export const supprimerCadrage = (jeton: string, id: string) =>
+  requete<void>(`/admin/cadrage/${id}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${jeton}` },
   });

@@ -51,7 +51,7 @@ const OU_IL_EN_EST: Record<Maturite, string> = {
 };
 
 function portrait(c: Contexte): string {
-  const lignes = [`Client : ${c.nom}${c.metier ? `, ${c.metier}` : ''}.`];
+  const lignes = [c.metier ? `Activité du client : ${c.metier}.` : 'Client.'];
   if (c.demande) lignes.push(`Sa demande de départ : « ${c.demande} ».`);
   if (c.maturite) lignes.push(`Point de départ déclaré : ${OU_IL_EN_EST[c.maturite]}`);
 

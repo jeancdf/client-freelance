@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch } from 'react';
+import { useCallback, useEffect, useState, type Dispatch } from 'react';
 import {
   INDEX_HORS_PERIMETRE,
   INDEX_PERIMETRE,
@@ -24,11 +24,14 @@ export interface Entretien {
   trancher: (choix: 'bascule' | 'maintien') => Promise<void>;
   /** Déclare le point complet : pas de question de suite. */
   clore: () => Promise<void>;
+  /** Dernière erreur d'écriture, affichée sans effacer le brouillon. */
+  erreur: string | null;
 }
 
 export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretien {
   const token = state.session?.token ?? null;
   const index = currentIndex(state);
+  const [erreur, setErreur] = useState<string | null>(null);
 
   // L'ouverture du point en cours : sa question, sa relance et ses réponses
   // probables. Mise en cache côté serveur — revenir sur un point ne regénère
@@ -160,6 +163,7 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
         type: 'suite',
         point: index,
         texte: suite.reponse.texte,
+        source: suite.reponse.source,
         question: suite.suite,
         rang: suite.rang,
         echanges: fil,
@@ -210,6 +214,7 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
         return;
       }
 
+      setErreur(null);
       dispatch({ type: 'submit' });
       try {
         const fil = state.echanges[index] ?? [];
@@ -224,9 +229,13 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
         const conserverCloture =
           historique && state.clos[index] && state.rang === dernierRangRepondu;
         await ecrire(texte, conserverCloture ? { ...extra, clore: true } : extra);
-      } catch {
-        // L'écriture a échoué : on rend la main plutôt que de laisser le bouton
-        // tourner indéfiniment. `usePersistance` réessaiera en fond.
+      } catch (cause) {
+        // Le brouillon reste intact : le client peut réessayer sans retaper.
+        setErreur(
+          cause instanceof Error
+            ? cause.message
+            : "La réponse n'a pas pu être enregistrée. Réessayez.",
+        );
         dispatch({ type: 'occupe', valeur: false });
       }
     },
@@ -247,5 +256,5 @@ export function useEntretien(state: State, dispatch: Dispatch<Action>): Entretie
     [dispatch],
   );
 
-  return { soumettre, confirmer, trancher, clore };
+  return { soumettre, confirmer, trancher, clore, erreur };
 }

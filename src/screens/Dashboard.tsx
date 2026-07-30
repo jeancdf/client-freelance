@@ -51,7 +51,7 @@ function Pips({ ligne }: { ligne: LigneCadrage }) {
         <span
           key={point.num}
           className={
-            k < ligne.couverture
+            ligne.pointsCouverts.includes(k)
               ? 'dash__pip dash__pip--done'
               : ligne.enCours === k
                 ? 'dash__pip dash__pip--current'
@@ -114,7 +114,9 @@ export function Dashboard() {
       if (!garde) return false;
 
       if (!recherche) return true;
-      return `${ligne.client.nom} ${ligne.client.metier} ${ligne.client.demande}`
+      return `${ligne.client.nom} ${ligne.client.metier} ${ligne.client.demande} ${
+        ligne.client.courriel ?? ''
+      }`
         .toLowerCase()
         .includes(recherche);
     });
@@ -144,6 +146,21 @@ export function Dashboard() {
       window.setTimeout(() => setCopie(null), 2000);
     } catch {
       setMessage(lien);
+    }
+  }
+
+  async function supprimer(ligne: LigneCadrage): Promise<void> {
+    if (!jeton) return;
+    const confirme = window.confirm(
+      `Supprimer le cadrage actif de ${ligne.client.nom}, réponses et fichiers compris ? Les copies de sauvegarde expirent avec la rotation (14 jours en production).`,
+    );
+    if (!confirme) return;
+    try {
+      await api.supprimerCadrage(jeton, ligne.id);
+      setMessage(`Le cadrage actif de ${ligne.client.nom} a été supprimé.`);
+      await charger(jeton);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Suppression impossible.');
     }
   }
 
@@ -240,6 +257,14 @@ export function Dashboard() {
                   <td>
                     <span className="dash__client">{ligne.client.nom}</span>
                     <span className="dash__client-meta">{ligne.client.metier}</span>
+                    {ligne.client.courriel && (
+                      <a
+                        className="dash__client-meta"
+                        href={`mailto:${ligne.client.courriel}`}
+                      >
+                        {ligne.client.courriel}
+                      </a>
+                    )}
                   </td>
                   <td className="dash__demande">{ligne.client.demande}</td>
                   <td className="dash__cover">
@@ -254,24 +279,33 @@ export function Dashboard() {
                   </td>
                   <td className="dash__signal">{depuis(ligne.majLe)}</td>
                   <td className="dash__actions">
-                    {dormant ? (
+                    <span className="dash__action-group">
+                      {dormant ? (
+                        <button
+                          type="button"
+                          className="dash__action"
+                          onClick={() => void copierLien(ligne)}
+                        >
+                          {copie === ligne.id ? 'LIEN COPIÉ' : 'RELANCER'}
+                        </button>
+                      ) : (
+                        <a
+                          className="dash__action"
+                          href={`/?c=${ligne.token}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {ligne.statut === 'valide' ? 'OUVRIR' : 'SUIVRE'}
+                        </a>
+                      )}
                       <button
                         type="button"
-                        className="dash__action"
-                        onClick={() => void copierLien(ligne)}
+                        className="dash__action dash__action--danger"
+                        onClick={() => void supprimer(ligne)}
                       >
-                        {copie === ligne.id ? 'LIEN COPIÉ' : 'RELANCER'}
+                        SUPPRIMER
                       </button>
-                    ) : (
-                      <a
-                        className="dash__action"
-                        href={`/?c=${ligne.token}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {ligne.statut === 'valide' ? 'OUVRIR' : 'SUIVRE'}
-                      </a>
-                    )}
+                    </span>
                   </td>
                 </tr>
               );

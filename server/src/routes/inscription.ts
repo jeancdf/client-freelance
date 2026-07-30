@@ -98,7 +98,7 @@ export function routesInscription(app: FastifyInstance, db: Base, sel: string): 
       { courriel: entree.courriel, ipEmpreinte: empreinte, dejaEntre: true },
     );
 
-    app.log.info({ cadrage: ligne.id, metier: entree.metier }, 'cadrage ouvert en libre-service');
+    app.log.info({ cadrage: ligne.id }, 'cadrage ouvert en libre-service');
 
     reply.code(201);
     return {

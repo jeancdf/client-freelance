@@ -2644,6 +2644,11 @@ textarea.landing__input {
   text-align: right;
 }
 
+.dash__action-group {
+  display: inline-flex;
+  gap: 5px;
+}
+
 /* Bouton ou lien selon l'action : même dessin dans les deux cas. */
 .dash__action {
   display: inline-flex;
@@ -2663,6 +2668,10 @@ textarea.landing__input {
 .dash__action:hover {
   border-color: var(--ink);
   color: var(--ink);
+}
+
+.dash__action--danger {
+  color: #9b2c20;
 }
 
 .dash__message {
